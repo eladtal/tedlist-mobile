@@ -44,31 +44,81 @@ const getUserTrades = async (): Promise<Trade[]> => {
 // Get potential matches for an item
 const getPotentialMatches = async (itemId: string): Promise<PotentialTrade[]> => {
   try {
-    const response = await api.get(`${ENDPOINTS.TRADES.GET_POTENTIAL_MATCHES}?itemId=${itemId}`);
+    console.log(`Fetching potential matches for item ID: ${itemId}`);
+    const url = `${ENDPOINTS.TRADES.GET_POTENTIAL_MATCHES}?itemId=${itemId}`;
+    console.log(`API endpoint: ${url}`);
+    
+    const response = await api.get(url);
+    console.log('Potential matches API response:', JSON.stringify(response.data));
+    
+    // If the response is empty or not an array, return an empty array
+    if (!response.data || !Array.isArray(response.data)) {
+      console.warn('API returned non-array data for potential matches:', response.data);
+      return [];
+    }
     
     // Transform the API response to the expected format
-    // This assumes the API returns items in a certain format that needs to be transformed
-    return response.data.map((match: any) => ({
-      id: match.id || match.itemId || Math.random().toString(),
-      item: {
-        id: match.id || match.itemId || '',
-        name: match.name || '',
-        description: match.description || '',
-        condition: match.condition || '',
-        category: match.category || '',
-        images: match.images || [],
-        owner: {
-          id: match.ownerId || '',
-          name: match.ownerName || ''
-        },
-        status: match.status || 'available',
-        createdAt: match.createdAt || new Date().toISOString(),
-        updatedAt: match.updatedAt || new Date().toISOString()
+    const transformedMatches = response.data.map((match: any) => {
+      // Check what structure the response has
+      if (match.item) {
+        // If response already has an item property
+        const item = match.item;
+        return {
+          id: match.id || String(Math.random()),
+          item: {
+            id: item.id || item._id || String(Math.random()),
+            name: item.title || item.name || 'Unnamed Item',
+            title: item.title,
+            description: item.description || 'No description available',
+            condition: item.condition || 'Unknown',
+            category: item.category || item.type || 'Miscellaneous',
+            images: Array.isArray(item.images) 
+              ? item.images 
+              : (item.images ? [item.images] : ['https://via.placeholder.com/150']),
+            owner: item.owner || {
+              id: item.userId || match.userId || '',
+              name: item.ownerName || match.ownerName || 'Owner'
+            },
+            status: item.status || 'available',
+            createdAt: item.createdAt || new Date().toISOString(),
+            updatedAt: item.updatedAt || new Date().toISOString()
+          }
+        };
+      } else {
+        // If the response item is flattened
+        return {
+          id: match.id || match._id || String(Math.random()),
+          item: {
+            id: match.id || match._id || String(Math.random()),
+            name: match.title || match.name || 'Unnamed Item',
+            title: match.title,
+            description: match.description || 'No description available',
+            condition: match.condition || 'Unknown',
+            category: match.category || match.type || 'Miscellaneous',
+            images: Array.isArray(match.images) 
+              ? match.images 
+              : (match.images ? [match.images] : ['https://via.placeholder.com/150']),
+            owner: {
+              id: match.userId || match.ownerId || '',
+              name: match.ownerName || 'Owner'
+            },
+            status: match.status || 'available',
+            createdAt: match.createdAt || new Date().toISOString(),
+            updatedAt: match.updatedAt || new Date().toISOString()
+          }
+        };
       }
-    }));
+    });
+    
+    console.log('Transformed matches:', JSON.stringify(transformedMatches));
+    return transformedMatches;
   } catch (error) {
     console.error('Error fetching potential matches:', error);
-    throw error;
+    // Return a more specific error that includes the original message
+    if (error instanceof Error) {
+      throw new Error(`Failed to get potential matches: ${error.message}`);
+    }
+    throw new Error('Failed to get potential matches');
   }
 };
 

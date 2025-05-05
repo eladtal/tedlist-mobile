@@ -28,7 +28,20 @@ export interface UpdateProfileRequest {
 export const userService = {
   // Get the user's profile
   getProfile: async (): Promise<User> => {
-    return apiRequest<User>('GET', ENDPOINTS.USER.PROFILE);
+    try {
+      console.log('Fetching user profile...');
+      const response = await apiRequest<User>('GET', ENDPOINTS.USER.PROFILE);
+      console.log('User profile fetched successfully');
+      return response;
+    } catch (error) {
+      console.error('Error in getProfile:', error);
+      // Transform the error to be more informative
+      if (error instanceof Error) {
+        throw new Error(`Failed to get user profile: ${error.message}`);
+      } else {
+        throw new Error('Failed to get user profile: Unknown error');
+      }
+    }
   },
   
   // Update user profile

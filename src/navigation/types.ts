@@ -13,6 +13,7 @@ export type MainTabParamList = {
   Profile: undefined;
   Notifications: undefined;
   Deals: undefined;
+  ItemDetail: { item: any };
 };
 
 // Trade navigation stack
@@ -27,6 +28,7 @@ export type RootStackParamList = {
   Main: NavigatorScreenParams<MainTabParamList>;
   SubmitItem: undefined;
   AdminPanel: undefined;
+  ItemDetail: { item: any };
 };
 
 // Declaration merging for useNavigation hook type safety

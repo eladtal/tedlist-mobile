@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -9,13 +9,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  ToastAndroid
+  ToastAndroid,
+  Image
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/types';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../api/config';
+import BiometricsManager from '../utils/BiometricsManager';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
@@ -28,7 +30,63 @@ const LoginScreen = () => {
   const [localLoading, setLocalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [biometricsAvailable, setBiometricsAvailable] = useState(false);
+  const [biometryType, setBiometryType] = useState<string | null>(null);
+  const [hasBiometricCredentials, setHasBiometricCredentials] = useState(false);
   
+  // Check if biometrics is available
+  useEffect(() => {
+    const checkBiometrics = async () => {
+      const { available, biometryType } = await BiometricsManager.isBiometricsAvailable();
+      setBiometricsAvailable(available);
+      setBiometryType(biometryType);
+      
+      // Check if user has stored biometric credentials
+      if (available) {
+        const hasCredentials = await BiometricsManager.hasStoredCredentials();
+        setHasBiometricCredentials(hasCredentials);
+        
+        // Pre-fill email if stored
+        if (hasCredentials) {
+          const storedEmail = await BiometricsManager.getStoredEmail();
+          if (storedEmail) {
+            setEmail(storedEmail);
+          }
+        }
+      }
+    };
+    
+    checkBiometrics();
+  }, []);
+  
+  // Handle biometric login
+  const handleBiometricLogin = async () => {
+    setError(null);
+    setLocalLoading(true);
+    setStatusMessage('Authenticating with biometrics...');
+    
+    try {
+      const biometryName = BiometricsManager.getBiometryTypeName(biometryType);
+      const result = await BiometricsManager.authenticate(`Sign in to Tedlist using ${biometryName}`);
+      
+      if (result.success && result.email) {
+        // Simulate login with stored credentials
+        setEmail(result.email);
+        setStatusMessage('Biometric authentication successful!');
+        
+        // Use the stored credentials to log in
+        await login(result.email, result.credentials || '');
+      } else {
+        setError('Biometric authentication failed. Please try again or use password.');
+      }
+    } catch (err) {
+      console.error('Biometric login error:', err);
+      setError('Biometric authentication failed. Please use your password.');
+    } finally {
+      setLocalLoading(false);
+    }
+  };
+
   const handleLogin = async () => {
     // Validate inputs
     if (!email.trim()) {
@@ -50,6 +108,37 @@ const LoginScreen = () => {
       
       await login(email, password);
       setStatusMessage('Login successful!');
+      
+      // Ask if user wants to enable biometric login if available
+      if (biometricsAvailable && !hasBiometricCredentials) {
+        setTimeout(() => {
+          const biometryName = BiometricsManager.getBiometryTypeName(biometryType);
+          Alert.alert(
+            `Enable ${biometryName} Login`,
+            `Would you like to use ${biometryName} for quicker login next time?`,
+            [
+              {
+                text: 'Not Now',
+                style: 'cancel'
+              },
+              {
+                text: 'Enable',
+                onPress: async () => {
+                  const success = await BiometricsManager.enableBiometrics(email, password);
+                  if (success) {
+                    if (Platform.OS === 'android') {
+                      ToastAndroid.show(`${biometryName} login enabled`, ToastAndroid.SHORT);
+                    } else {
+                      Alert.alert('Success', `${biometryName} login enabled`);
+                    }
+                  }
+                }
+              }
+            ]
+          );
+        }, 500); // Short delay for better UX
+      }
+      
       // The navigation is handled by the auth context through the AppNavigator
     } catch (err) {
       console.error('Login error:', err);
@@ -110,6 +199,7 @@ const LoginScreen = () => {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              editable={!localLoading}
             />
           </View>
           
@@ -121,6 +211,7 @@ const LoginScreen = () => {
               onChangeText={setPassword}
               placeholder="Enter your password"
               secureTextEntry
+              editable={!localLoading}
             />
           </View>
           
@@ -131,16 +222,29 @@ const LoginScreen = () => {
           </View>
           
           <TouchableOpacity 
-            style={[styles.button, (isLoading || localLoading) && styles.buttonDisabled]}
+            style={[styles.loginButton, (isLoading || localLoading) && styles.loginButtonDisabled]}
             onPress={handleLogin}
             disabled={isLoading || localLoading}
           >
             {(isLoading || localLoading) ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <Text style={styles.buttonText}>Log In</Text>
+              <Text style={styles.loginButtonText}>Log In</Text>
             )}
           </TouchableOpacity>
+          
+          {/* Biometric Login Button */}
+          {biometricsAvailable && hasBiometricCredentials && (
+            <TouchableOpacity
+              style={styles.biometricButton}
+              onPress={handleBiometricLogin}
+              disabled={localLoading}
+            >
+              <Text style={styles.biometricButtonText}>
+                {`Login with ${BiometricsManager.getBiometryTypeName(biometryType)}`}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
         
         <View style={styles.footer}>
@@ -239,7 +343,7 @@ const styles = StyleSheet.create({
     color: '#7950f2',
     fontSize: 14,
   },
-  button: {
+  loginButton: {
     backgroundColor: '#7950f2',
     height: 50,
     borderRadius: 8,
@@ -247,11 +351,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 15,
   },
-  buttonDisabled: {
-    backgroundColor: '#b197fc',
+  loginButtonDisabled: {
+    backgroundColor: '#b29ddb',
   },
-  buttonText: {
+  loginButtonText: {
     color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  biometricButton: {
+    backgroundColor: '#f5f5f5',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#7950f2',
+  },
+  biometricButtonText: {
+    color: '#7950f2',
     fontSize: 16,
     fontWeight: '600',
   },

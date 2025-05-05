@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   View, 
   Text, 
@@ -6,23 +6,85 @@ import {
   SafeAreaView, 
   ScrollView, 
   TouchableOpacity, 
-  Image 
+  Image,
+  Alert,
+  ActivityIndicator
 } from 'react-native';
-
-// Mock user data
-const mockUser = {
-  name: 'Alex',
-  email: 'alex@example.com',
-  joined: 'March 2025',
-  avatar: 'https://via.placeholder.com/150',
-  stats: {
-    trades: 12,
-    listings: 8,
-    xp: 120
-  }
-};
+import { useAuth } from '../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
 
 const ProfileScreen = () => {
+  const { user, logout, isLoading } = useAuth();
+  const [localLoading, setLocalLoading] = useState(false);
+  const navigation = useNavigation();
+  
+  // Format the date to display the join date in a user-friendly format
+  const formatJoinDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      month: 'long',
+      year: 'numeric'
+    });
+  };
+  
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to log out?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            setLocalLoading(true);
+            try {
+              await logout();
+              // Navigation should be handled by the auth context
+            } catch (error) {
+              console.error('Logout error:', error);
+              Alert.alert('Error', 'Failed to log out. Please try again.');
+            } finally {
+              setLocalLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+  
+  // While the auth state is loading, show a loading indicator
+  if (isLoading || localLoading) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#7950f2" />
+        <Text style={styles.loadingText}>
+          {localLoading ? 'Logging out...' : 'Loading profile...'}
+        </Text>
+      </SafeAreaView>
+    );
+  }
+  
+  // If no user data, show an error or placeholder
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.errorContainer}>
+        <Text style={styles.errorText}>
+          Could not load profile data. Please try again later.
+        </Text>
+        <TouchableOpacity 
+          style={styles.retryButton}
+          onPress={() => navigation.navigate('Login' as never)}
+        >
+          <Text style={styles.retryButtonText}>Go to Login</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+  
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -30,52 +92,71 @@ const ProfileScreen = () => {
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
             <Image 
-              source={{ uri: mockUser.avatar }} 
+              source={{ 
+                uri: user.avatar || 'https://via.placeholder.com/150?text=User' 
+              }} 
               style={styles.avatar} 
             />
           </View>
-          <Text style={styles.name}>{mockUser.name}</Text>
-          <Text style={styles.email}>{mockUser.email}</Text>
-          <Text style={styles.joinedDate}>Member since {mockUser.joined}</Text>
+          <Text style={styles.name}>{user.name}</Text>
+          <Text style={styles.email}>{user.email}</Text>
+          <Text style={styles.joinedDate}>
+            Member since {formatJoinDate(user.createdAt)}
+          </Text>
         </View>
         
         {/* Stats Section */}
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{mockUser.stats.trades}</Text>
+            <Text style={styles.statValue}>{user.stats?.trades || 0}</Text>
             <Text style={styles.statLabel}>Trades</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{mockUser.stats.listings}</Text>
+            <Text style={styles.statValue}>{user.stats?.listings || 0}</Text>
             <Text style={styles.statLabel}>Listings</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{mockUser.stats.xp}</Text>
+            <Text style={styles.statValue}>{user.stats?.xp || 0}</Text>
             <Text style={styles.statLabel}>XP</Text>
           </View>
         </View>
         
         {/* Options */}
         <View style={styles.optionsContainer}>
-          <TouchableOpacity style={styles.option}>
+          <TouchableOpacity 
+            style={styles.option}
+            onPress={() => Alert.alert('Coming Soon', 'Profile editing will be available soon.')}
+          >
             <Text style={styles.optionText}>Edit Profile</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.option}>
+          <TouchableOpacity 
+            style={styles.option}
+            onPress={() => Alert.alert('Coming Soon', 'Privacy settings will be available soon.')}
+          >
             <Text style={styles.optionText}>Privacy Settings</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.option}>
+          <TouchableOpacity 
+            style={styles.option}
+            onPress={() => Alert.alert('Coming Soon', 'Notification preferences will be available soon.')}
+          >
             <Text style={styles.optionText}>Notification Preferences</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.option}>
+          <TouchableOpacity 
+            style={styles.option}
+            onPress={() => Alert.alert('Coming Soon', 'Help & Support will be available soon.')}
+          >
             <Text style={styles.optionText}>Help & Support</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={[styles.option, styles.logoutOption]}>
+          <TouchableOpacity 
+            style={[styles.option, styles.logoutOption]} 
+            onPress={handleLogout}
+          >
             <Text style={styles.logoutText}>Log Out</Text>
           </TouchableOpacity>
         </View>
@@ -185,6 +266,41 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     color: '#e53935',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  loadingText: {
+    marginTop: 15,
+    fontSize: 16,
+    color: '#555',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#e53935',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#7950f2',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 5,
+  },
+  retryButtonText: {
+    color: '#fff',
     fontSize: 16,
     fontWeight: '500',
   },

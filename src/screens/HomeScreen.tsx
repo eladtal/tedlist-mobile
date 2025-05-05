@@ -4,7 +4,7 @@ import {
   Text, 
   StyleSheet, 
   TouchableOpacity, 
-  ScrollView, 
+  FlatList,
   RefreshControl,
   ActivityIndicator,
   SafeAreaView,
@@ -14,36 +14,71 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MainTabParamList } from '../navigation/types';
-import { useAuth } from '../context/AuthContext'; // Assuming you have an auth hook
+import { useAuth } from '../context/AuthContext'; 
+import { itemService } from '../api';
+import { API_BASE_URL } from '../api/config';
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<MainTabParamList, 'Home'>;
 
-// Temporary mock data
+// Updated Item interface to match both mobile app and backend fields
 interface Item {
   id: string;
-  name: string;
+  _id?: string;  // MongoDB ObjectId
+  name?: string; // Support for mobile app
+  title?: string; // Support for backend
   description: string;
   condition: string;
-  category: string;
-  imageUrl: string;
+  category?: string; // Support for mobile app
+  type?: string; // Support for backend (trade/sell)
+  images: string[];
+  thumbnails: string[]; // Added for performance
+  owner?: {
+    id: string;
+    name: string;
+  };
+  status: 'available' | 'traded' | 'pending' | 'removed' | 'deleted';
+  createdAt: string;
+  updatedAt: string;
+  userId?: string; // Support for backend
 }
 
+// Mock items as fallback
 const mockItems: Item[] = [
   {
     id: '1',
+    title: 'Vintage Camera',
     name: 'Vintage Camera',
     description: 'A beautiful vintage film camera in working condition',
     condition: 'Good',
     category: 'Electronics',
-    imageUrl: 'https://via.placeholder.com/150'
+    type: 'trade',
+    images: ['https://via.placeholder.com/150'],
+    thumbnails: ['https://via.placeholder.com/150'],
+    owner: {
+      id: '123',
+      name: 'Alex'
+    },
+    status: 'available',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   },
   {
     id: '2',
+    title: 'Mountain Bike',
     name: 'Mountain Bike',
     description: 'Lightly used mountain bike, perfect for trails',
     condition: 'Excellent',
     category: 'Sports',
-    imageUrl: 'https://via.placeholder.com/150'
+    type: 'trade',
+    images: ['https://via.placeholder.com/150'],
+    thumbnails: ['https://via.placeholder.com/150'],
+    owner: {
+      id: '123',
+      name: 'Alex'
+    },
+    status: 'available',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   }
 ];
 
@@ -61,13 +96,11 @@ const HomeScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Simulated XP data
   const xp = 120;
   const xpGoal = 500;
   
   const { user } = useAuth();
   
-  // Simulate fetching items
   useEffect(() => {
     fetchItems();
   }, []);
@@ -75,7 +108,6 @@ const HomeScreen = () => {
   useEffect(() => {
     console.log('HomeScreen mounted, user data:', user);
     
-    // This will help us debug if the user data is correctly loaded
     if (user) {
       console.log('User is authenticated:', user.name);
     } else {
@@ -83,23 +115,37 @@ const HomeScreen = () => {
     }
   }, [user]);
   
-  const fetchItems = () => {
+  const fetchItems = async () => {
     setIsLoading(true);
-    // Simulate API call with delay
-    setTimeout(() => {
-      setItems(mockItems);
+    setError(null);
+    
+    try {
+      const data = await itemService.getUserItems();
+      console.log('Items fetched successfully:', data);
+      setItems(data);
+      
+    } catch (err) {
+      console.error('Error fetching items:', err);
+      
+      if (__DEV__) {
+        console.log('Using mock data as fallback');
+        setItems(mockItems);
+        setError('Could not fetch items from server - using mock data');
+      } else {
+        setError('Could not fetch your items. Please try again later.');
+        setItems([]);
+      }
+    } finally {
       setIsLoading(false);
-      setError(null);
-    }, 1000);
+    }
   };
   
   const onRefresh = () => {
     setRefreshing(true);
-    // Simulate refresh
-    setTimeout(() => {
-      fetchItems();
-      setRefreshing(false);
-    }, 1500);
+    fetchItems()
+      .finally(() => {
+        setRefreshing(false);
+      });
   };
   
   const navigateToSubmitItem = () => {
@@ -108,6 +154,40 @@ const HomeScreen = () => {
   
   const navigateToTradeSelect = () => {
     navigation.navigate('Trade', { screen: 'ItemSelection' });
+  };
+
+  // Render a single item (optimized for FlatList)
+  const renderItem = ({ item, index }: { item: Item; index: number }) => {
+    // Use thumbnail for list view (much better performance)
+    const imageUrl = item.thumbnails && item.thumbnails.length > 0 
+      ? item.thumbnails[0] 
+      : 'https://via.placeholder.com/150';
+
+    return (
+      <TouchableOpacity 
+        key={item.id || index} 
+        style={styles.itemCard}
+        onPress={() => navigation.navigate('ItemDetail', { item })}
+        activeOpacity={0.7}
+      >
+        <Image 
+          source={{ uri: imageUrl }} 
+          style={styles.itemImage} 
+          resizeMode="cover"
+          onError={(e) => console.error(`Image load error: ${e.nativeEvent.error}`)}
+        />
+        <View style={styles.itemDetails}>
+          <Text style={styles.itemName}>{item.title || item.name}</Text>
+          <Text style={styles.itemDescription} numberOfLines={2}>
+            {item.description}
+          </Text>
+          <View style={styles.itemMeta}>
+            <Text style={styles.itemCondition}>{item.condition}</Text>
+            <Text style={styles.itemCategory}>{item.category || item.type}</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
   };
   
   const renderMyItems = () => {
@@ -130,7 +210,7 @@ const HomeScreen = () => {
       );
     }
     
-    if (items.length === 0) {
+    if (!items || items.length === 0) {
       return (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>You don't have any items yet.</Text>
@@ -142,47 +222,31 @@ const HomeScreen = () => {
     }
     
     return (
-      <View style={styles.itemsContainer}>
-        {items.map(item => (
-          <View key={item.id} style={styles.itemCard}>
-            <Image 
-              source={{ uri: item.imageUrl }} 
-              style={styles.itemImage} 
-              resizeMode="cover"
-            />
-            <View style={styles.itemDetails}>
-              <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemDescription} numberOfLines={2}>
-                {item.description}
-              </Text>
-              <View style={styles.itemMeta}>
-                <Text style={styles.itemCondition}>{item.condition}</Text>
-                <Text style={styles.itemCategory}>{item.category}</Text>
-              </View>
-            </View>
-          </View>
-        ))}
-      </View>
+      <FlatList
+        data={items}
+        renderItem={renderItem}
+        keyExtractor={(item, index) => item.id || index.toString()}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={4}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={true}
+        contentContainerStyle={styles.itemsContainer}
+      />
     );
   };
   
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
+      <View style={styles.scrollContent}>
         <View style={styles.header}>
           <Text style={styles.greeting}>
-            <Text style={styles.greetingHighlight}>Hey {mockUser.name}!</Text>
+            <Text style={styles.greetingHighlight}>Hey {user?.name || mockUser.name}!</Text>
           </Text>
           <Text style={styles.subGreeting}>What would you like to do today?</Text>
         </View>
         
-        {/* XP Progress */}
         <View style={styles.xpContainer}>
           <View style={styles.xpCard}>
             <View style={styles.xpHeader}>
@@ -199,48 +263,40 @@ const HomeScreen = () => {
             </View>
             <View style={styles.achievementContainer}>
               <View style={styles.achievementBadge}>
-                <Text style={styles.achievementText}>Top Trader of the Week</Text>
+                <Text style={styles.achievementText}>🏆</Text>
               </View>
+              <Text style={styles.achievementLabel}>Item Posted</Text>
             </View>
           </View>
         </View>
         
-        {/* Action Buttons */}
         <View style={styles.actionButtons}>
           <TouchableOpacity 
             style={styles.tradeButton}
-            onPress={navigateToTradeSelect}
-          >
+            onPress={navigateToTradeSelect}>
             <Text style={styles.buttonText}>Trade an Item</Text>
           </TouchableOpacity>
           
-          {/* Buy button (Coming Soon) */}
           <View style={styles.disabledButtonContainer}>
             <View style={styles.disabledButton}>
               <Text style={styles.disabledButtonText}>Buy Something</Text>
-            </View>
-            <View style={styles.comingSoonBadge}>
               <Text style={styles.comingSoonText}>Coming Soon</Text>
             </View>
           </View>
           
-          {/* Sell button (Coming Soon) */}
           <View style={styles.disabledButtonContainer}>
             <View style={styles.disabledButton}>
               <Text style={styles.disabledButtonText}>Sell an Item</Text>
-            </View>
-            <View style={styles.comingSoonBadge}>
               <Text style={styles.comingSoonText}>Coming Soon</Text>
             </View>
           </View>
         </View>
         
-        {/* My Items Section */}
         <View style={styles.myItemsSection}>
           <Text style={styles.sectionTitle}>My Items</Text>
           {renderMyItems()}
         </View>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 };
@@ -251,206 +307,199 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 30,
+    flex: 1,
+    paddingHorizontal: 15,
   },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 10,
-    alignItems: 'center',
+    marginTop: 15,
+    marginBottom: 20,
   },
   greeting: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 6,
-    textAlign: 'center',
+    fontSize: 22,
+    color: '#333',
   },
   greetingHighlight: {
+    fontWeight: 'bold',
     color: '#7950f2',
   },
   subGreeting: {
-    fontSize: 18,
+    fontSize: 16,
     color: '#666',
-    textAlign: 'center',
+    marginTop: 5,
   },
   xpContainer: {
-    paddingHorizontal: 20,
-    marginTop: 15,
-    alignItems: 'center',
+    marginBottom: 20,
   },
   xpCard: {
-    width: '100%',
-    maxWidth: 350,
-    backgroundColor: 'white',
+    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowRadius: 4,
+    elevation: 2,
   },
   xpHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    alignItems: 'center',
+    marginBottom: 10,
   },
   xpTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#444',
+    fontWeight: 'bold',
+    color: '#333',
   },
   xpCount: {
     fontSize: 14,
-    color: '#777',
+    color: '#666',
   },
   progressBarBg: {
-    height: 10,
-    backgroundColor: '#eee',
-    borderRadius: 5,
-    overflow: 'hidden',
+    height: 8,
+    backgroundColor: '#e9ecef',
+    borderRadius: 4,
+    marginBottom: 15,
   },
   progressBar: {
-    height: '100%',
-    backgroundColor: '#69db7c',
-    borderRadius: 5,
+    height: 8,
+    backgroundColor: '#7950f2',
+    borderRadius: 4,
   },
   achievementContainer: {
-    marginTop: 12,
     flexDirection: 'row',
+    alignItems: 'center',
   },
   achievementBadge: {
-    backgroundColor: '#d3f9d8',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#f9f7fd',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
   },
   achievementText: {
-    color: '#2b8a3e',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 16,
+  },
+  achievementLabel: {
+    fontSize: 14,
+    color: '#666',
   },
   actionButtons: {
-    paddingHorizontal: 20,
-    marginTop: 25,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
   },
   tradeButton: {
-    backgroundColor: '#d3f9d8',
-    paddingVertical: 16,
-    borderRadius: 12,
+    flex: 1,
+    backgroundColor: '#7950f2',
+    paddingVertical: 12,
+    borderRadius: 8,
     alignItems: 'center',
-    marginBottom: 12,
+    marginRight: 8,
+  },
+  buttonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  disabledButtonContainer: {
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  disabledButton: {
+    backgroundColor: '#e9ecef',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  disabledButtonText: {
+    color: '#adb5bd',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  comingSoonText: {
+    color: '#adb5bd',
+    fontSize: 10,
+    marginTop: 2,
+  },
+  myItemsSection: {
+    flex: 1,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 15,
+  },
+  loadingContainer: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorContainer: {
+    padding: 20,
+    alignItems: 'center',
+    backgroundColor: '#fff4f4',
+    borderRadius: 8,
+  },
+  errorText: {
+    color: '#e53935',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#7950f2',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 4,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    padding: 30,
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+  },
+  emptyText: {
+    color: '#666',
+    fontSize: 16,
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  submitButton: {
+    backgroundColor: '#7950f2',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 6,
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  itemsContainer: {
+    paddingBottom: 20,
+  },
+  itemCard: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    marginBottom: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
-  },
-  buttonText: {
-    color: '#2b8a3e',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  disabledButtonContainer: {
-    position: 'relative',
-    marginBottom: 12,
-  },
-  disabledButton: {
-    backgroundColor: '#eee',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  disabledButtonText: {
-    color: '#999',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  comingSoonBadge: {
-    position: 'absolute',
-    top: -8,
-    right: 10,
-    backgroundColor: '#ddd',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  comingSoonText: {
-    color: '#666',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  myItemsSection: {
-    marginTop: 30,
-    paddingHorizontal: 20,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 15,
-    textAlign: 'center',
-  },
-  loadingContainer: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  errorContainer: {
-    padding: 20,
-    alignItems: 'center',
-    backgroundColor: '#ffebee',
-    borderRadius: 8,
-  },
-  errorText: {
-    color: '#d32f2f',
-    marginBottom: 10,
-  },
-  retryButton: {
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    backgroundColor: '#d32f2f',
-    borderRadius: 6,
-  },
-  retryButtonText: {
-    color: 'white',
-    fontWeight: '600',
-  },
-  emptyContainer: {
-    padding: 20,
-    alignItems: 'center',
-    backgroundColor: '#f9f9f9',
-    borderRadius: 8,
-  },
-  emptyText: {
-    color: '#666',
-    marginBottom: 10,
-  },
-  submitButton: {
-    paddingVertical: 8,
-  },
-  submitButtonText: {
-    color: '#69db7c',
-    fontWeight: '600',
-  },
-  itemsContainer: {
-    marginBottom: 20,
-  },
-  itemCard: {
-    backgroundColor: 'white',
-    borderRadius: 10,
-    marginBottom: 15,
-    overflow: 'hidden',
     flexDirection: 'row',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    overflow: 'hidden',
   },
   itemImage: {
     width: 100,
     height: 100,
+    backgroundColor: '#f1f3f5',
   },
   itemDetails: {
     flex: 1,
@@ -460,7 +509,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   itemDescription: {
     fontSize: 14,
@@ -472,17 +521,17 @@ const styles = StyleSheet.create({
   },
   itemCondition: {
     fontSize: 12,
-    backgroundColor: '#e6f3ff',
-    color: '#0066cc',
+    color: '#7950f2',
+    backgroundColor: '#f3f0ff',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
-    marginRight: 8,
+    marginRight: 6,
   },
   itemCategory: {
     fontSize: 12,
-    backgroundColor: '#fff2e6',
-    color: '#ff8c00',
+    color: '#2b8a3e',
+    backgroundColor: '#e6f7ef',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,

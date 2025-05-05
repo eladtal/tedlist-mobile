@@ -44,6 +44,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
 
+  // Helper method to handle logout
+  const handleLogout = async () => {
+    try {
+      // Clear user data first to avoid UI issues
+      setUser(null);
+      setIsAuthenticated(false);
+      
+      // Then try to call logout API to invalidate token on server
+      // Wrapped in try/catch so even if this fails, the local logout succeeds
+      try {
+        await authService.logout();
+      } catch (logoutError) {
+        console.log('Non-critical: Error calling logout API:', logoutError);
+        // This is non-critical - we still want to clear local storage even if API fails
+      }
+      
+      // Clear storage
+      await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+      await AsyncStorage.removeItem(REFRESH_TOKEN_KEY);
+    } catch (error) {
+      console.error('Error during logout:', error);
+      // Even if there's an error, we should try to clean up the state
+      setUser(null);
+      setIsAuthenticated(false);
+    }
+  };
+
   // Check for authentication on app start
   useEffect(() => {
     const checkAuthStatus = async () => {
@@ -53,13 +80,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (token) {
           // Fetch user profile
           try {
-            const userService = (await import('../api/userService')).default;
-            const userData = await userService.getProfile();
-            setUser(userData as User);
-            setIsAuthenticated(true);
+            // Safely handle potential user service loading issues
+            let userService;
+            try {
+              userService = (await import('../api/userService')).default;
+            } catch (importError) {
+              console.error('Error importing userService:', importError);
+              await handleLogout();
+              return;
+            }
+            
+            // Try to get the profile if userService loaded successfully
+            if (userService && userService.getProfile) {
+              const userData = await userService.getProfile();
+              if (userData) {
+                setUser(userData as User);
+                setIsAuthenticated(true);
+              } else {
+                console.log('No user data returned, logging out');
+                await handleLogout();
+              }
+            } else {
+              console.error('UserService or getProfile method not found');
+              await handleLogout();
+            }
           } catch (profileError) {
             console.error('Error fetching user profile:', profileError);
-            // If profile fetch fails, token might be invalid
+            // Don't show an error alert to the user - just log them out silently
             await handleLogout();
           }
         }
@@ -124,28 +171,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Logout function
   const logout = async () => {
     setIsLoading(true);
+    
     try {
       await handleLogout();
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  // Helper method to handle logout
-  const handleLogout = async () => {
-    try {
-      // Call logout API to invalidate token on server
-      await authService.logout();
-    } catch (error) {
-      console.error('Error calling logout API:', error);
-    } finally {
-      // Clear user data regardless of API result
-      await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
-      await AsyncStorage.removeItem(REFRESH_TOKEN_KEY);
-      setUser(null);
-      setIsAuthenticated(false);
     }
   };
 

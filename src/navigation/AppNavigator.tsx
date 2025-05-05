@@ -12,6 +12,7 @@ import MainTabNavigator from './MainTabNavigator';
 // Import standalone screens (to be implemented)
 import SubmitItemScreen from '../screens/SubmitItemScreen';
 import AdminPanelScreen from '../screens/AdminPanelScreen';
+import ItemDetailScreen from '../screens/ItemDetailScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -54,6 +55,11 @@ const AppNavigator = () => {
                 name="AdminPanel" 
                 component={AdminPanelScreen} 
                 options={{ title: 'Admin Panel' }}
+              />
+              <Stack.Screen 
+                name="ItemDetail" 
+                component={ItemDetailScreen}
+                options={{ title: 'Item Details' }}
               />
             </Stack.Group>
           </>

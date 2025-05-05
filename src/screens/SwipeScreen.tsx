@@ -90,16 +90,31 @@ const SwipeScreen = () => {
     setError(null);
     
     try {
+      console.log(`Fetching potential trades for item ID: ${selectedItemId}`);
       const response = await tradeService.getPotentialMatches(selectedItemId);
-      setPotentialTrades(response);
-      setIsLoading(false);
+      console.log(`Received ${response.length} potential trades`);
+      
+      if (response && Array.isArray(response) && response.length > 0) {
+        setPotentialTrades(response);
+        console.log('First potential trade item:', JSON.stringify(response[0]?.item || {}, null, 2));
+      } else {
+        // Handle empty response with a specific message
+        console.log('No potential trades found');
+        setError('No potential matches found for this item. Try a different item or check back later.');
+      }
     } catch (err) {
       console.error('Error fetching potential trades:', err);
-      setError('Failed to load potential trades. Please try again.');
+      // Create a more user-friendly error message
+      const errorMessage = err instanceof Error 
+        ? `Failed to load potential trades: ${err.message}`
+        : 'Failed to load potential trades. Please check your connection and try again.';
+      
+      setError(errorMessage);
+    } finally {
       setIsLoading(false);
     }
   };
-  
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -199,15 +214,39 @@ const SwipeScreen = () => {
 
   const renderNoMoreCards = () => (
     <View style={styles.noMoreCardsContainer}>
-      <Text style={styles.noMoreCardsText}>No More Items</Text>
-      <Text style={styles.noMoreCardsSubtext}>
-        You've viewed all available items for now
-      </Text>
+      <Text style={styles.noMoreCardsText}>No more items to show</Text>
       <TouchableOpacity 
-        style={styles.returnButton}
+        style={styles.retryButton}
+        onPress={() => {
+          // Reset state and retry fetching
+          setCurrentIndex(0);
+          fetchPotentialTrades();
+        }}
+      >
+        <Text style={styles.retryButtonText}>Try Again</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderError = () => (
+    <View style={styles.errorContainer}>
+      <Text style={styles.errorText}>{error}</Text>
+      <TouchableOpacity 
+        style={styles.retryButton}
+        onPress={() => {
+          // Reset and retry
+          setError(null);
+          setCurrentIndex(0);
+          fetchPotentialTrades();
+        }}
+      >
+        <Text style={styles.retryButtonText}>Try Again</Text>
+      </TouchableOpacity>
+      <TouchableOpacity 
+        style={[styles.retryButton, styles.backButton]}
         onPress={() => navigation.goBack()}
       >
-        <Text style={styles.returnButtonText}>Return to Selection</Text>
+        <Text style={styles.retryButtonText}>Go Back</Text>
       </TouchableOpacity>
     </View>
   );
@@ -310,15 +349,7 @@ const SwipeScreen = () => {
   if (error) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity 
-            style={styles.retryButton}
-            onPress={fetchPotentialTrades}
-          >
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
+        {renderError()}
       </SafeAreaView>
     );
   }

@@ -102,10 +102,19 @@ export const authService = {
   // Logout user
   logout: async (): Promise<void> => {
     try {
-      // Call logout endpoint to invalidate token on server
-      await apiRequest<{ success: boolean }>('POST', ENDPOINTS.AUTH.LOGOUT);
+      // Check if we have a token before trying to call the API
+      // This is a best-effort approach - we'll try to tell the server about logout
+      // But we won't fail the whole logout process if this fails
+      try {
+        await apiRequest<{ success: boolean }>('POST', ENDPOINTS.AUTH.LOGOUT);
+        console.log('Successfully called logout API');
+      } catch (apiError) {
+        // Just log this error but don't rethrow - logout should still succeed locally
+        console.log('Non-critical: Logout API call failed, proceeding with local logout');
+      }
     } catch (error) {
       console.error('Error during logout:', error);
+      // We don't rethrow here - logout should never fail from the user's perspective
     }
   }
 };
