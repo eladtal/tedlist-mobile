@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
   ScrollView,
   TouchableOpacity,
   Alert,
@@ -18,6 +17,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MainTabParamList } from '../navigation/types';
 import { itemService } from '../api';
 import { Item } from '../api/itemService';
+import SimpleImage from '../components/SimpleImage';
 
 type ItemDetailScreenRouteProp = RouteProp<MainTabParamList, 'ItemDetail'>;
 type ItemDetailScreenNavigationProp = NativeStackNavigationProp<MainTabParamList, 'ItemDetail'>;
@@ -88,8 +88,8 @@ const ItemDetailScreen = () => {
       <ScrollView contentContainerStyle={styles.content}>
         {/* Image Gallery */}
         <View style={styles.imageContainer}>
-          <Image
-            source={{ uri: item.images[0] || 'https://via.placeholder.com/400' }}
+          <SimpleImage
+            uri={item.images && item.images.length > 0 ? item.images[0] : undefined}
             style={styles.image}
             resizeMode="cover"
           />

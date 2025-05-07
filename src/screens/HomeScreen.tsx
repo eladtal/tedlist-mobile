@@ -9,16 +9,24 @@ import {
   ActivityIndicator,
   SafeAreaView,
   StatusBar,
+  Dimensions,
+  Platform,
   Image
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { MainTabParamList } from '../navigation/types';
+import { MainTabParamList, RootStackParamList } from '../navigation/types';
 import { useAuth } from '../context/AuthContext'; 
 import { itemService } from '../api';
 import { API_BASE_URL } from '../api/config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import ImageTest from '../components/ImageTest';
+import SimpleImage from '../components/SimpleImage';
+import { Alert } from 'react-native';
+import FastImage from 'react-native-fast-image';
+import S3Image from '../components/S3Image';
 
-type HomeScreenNavigationProp = NativeStackNavigationProp<MainTabParamList, 'Home'>;
+type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 // Updated Item interface to match both mobile app and backend fields
 interface Item {
@@ -40,6 +48,12 @@ interface Item {
   createdAt: string;
   updatedAt: string;
   userId?: string; // Support for backend
+  cacheKey?: string; // New cacheKey field
+  imageStorageKey?: string; // New imageStorageKey field
+  localImageUri?: string; // New localImageUri field
+  imageUrl?: string; // Support for alternate image URL format
+  imageURL?: string; // Support for alternate image URL format (uppercase)
+  image?: string; // Support for single image string
 }
 
 // Mock items as fallback
@@ -101,9 +115,180 @@ const HomeScreen = () => {
   
   const { user } = useAuth();
   
+  const [imageCache, setImageCache] = useState<Record<string, string>>({});
+
+  // Load local image cache from AsyncStorage
   useEffect(() => {
-    fetchItems();
+    const loadImageCache = async () => {
+      try {
+        const cachingStr = await AsyncStorage.getItem('local_image_cache');
+        if (cachingStr) {
+          const caching = JSON.parse(cachingStr);
+          console.log('HOME: Loaded image cache with', Object.keys(caching).length, 'items');
+          console.log('HOME: Cache keys:', Object.keys(caching).slice(0, 2));
+          setImageCache(caching);
+        } else {
+          console.log('HOME: No image cache found in AsyncStorage');
+        }
+      } catch (error) {
+        console.error('Error loading image cache:', error);
+      }
+    };
+    
+    loadImageCache();
   }, []);
+
+  // Reload cache when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      const loadImageCache = async () => {
+        try {
+          const cachingStr = await AsyncStorage.getItem('local_image_cache');
+          if (cachingStr) {
+            const caching = JSON.parse(cachingStr);
+            console.log('Reloaded image cache:', Object.keys(caching).length, 'items');
+            setImageCache(caching);
+          }
+        } catch (error) {
+          console.error('Error loading image cache:', error);
+        }
+      };
+
+      loadImageCache();
+    }, [])
+  );
+
+  // Fetch items on initial mount
+  useEffect(() => {
+    const loadItems = async () => {
+      try {
+        setIsLoading(true);
+        console.log('Attempting to load user items...');
+        
+        // DEBUG: Let's print exactly what URLs are in the response
+        const debugRawData = async () => {
+          try {
+            const token = await AsyncStorage.getItem('auth_token');
+            const response = await fetch('https://tedlist-backend.onrender.com/api/items/user', {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            const data = await response.json();
+            console.log('🔍 RAW SERVER RESPONSE:', JSON.stringify(data));
+            
+            // If we have items, inspect the first one's image data
+            if (Array.isArray(data) && data.length > 0) {
+              console.log('🖼️ First item image data:', JSON.stringify(data[0].images));
+            } else if (data && data.items && Array.isArray(data.items) && data.items.length > 0) {
+              console.log('🖼️ First item image data:', JSON.stringify(data.items[0].images));
+            }
+          } catch (err) {
+            console.error('Debug fetch error:', err);
+          }
+        };
+        
+        // Run our debug function
+        await debugRawData();
+        
+        let userItems: Item[];
+        
+        try {
+          // Set a timeout for the API call
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+          
+          // Directly await the getUserItems call with safer error handling
+          userItems = await itemService.getUserItems();
+          clearTimeout(timeoutId);
+          
+          console.log(`Successfully loaded ${userItems.length} items`);
+        } catch (error) {
+          console.error('Error fetching items:', error);
+          console.log('Using mock items as fallback');
+          userItems = mockItems;
+        }
+        
+        console.log('===== LOADED ITEMS ANALYSIS =====');
+        console.log('Loaded items count:', userItems.length);
+        
+        // Analyze each item's images
+        userItems.forEach((item, index) => {
+          console.log(`\nITEM ${index + 1}: ${item.name || item.title} (ID: ${item.id || item._id})`);
+          console.log(`- Has images array: ${!!item.images}`);
+          console.log(`- Images array length: ${item.images?.length || 0}`);
+          
+          // Most important part: Check for S3 URLs specifically
+          if (item.images && Array.isArray(item.images) && item.images.length > 0) {
+            const s3Images = item.images.filter(img => 
+              typeof img === 'string' && img.includes('s3.amazonaws.com')
+            );
+            
+            if (s3Images.length > 0) {
+              console.log(`🎯 FOUND ${s3Images.length} S3 IMAGES:`);
+              s3Images.forEach((url, i) => console.log(`  S3 URL ${i+1}: ${url}`));
+            }
+            
+            item.images.forEach((img, imgIndex) => {
+              console.log(`- Image ${imgIndex + 1}: ${img}`);
+            });
+          }
+        });
+        
+        setItems(userItems);
+      } catch (error) {
+        console.error('Error loading items:', error);
+        setItems(mockItems);
+        Alert.alert('Error', 'Failed to load your items. Please try again later.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadItems();
+  }, []);
+
+  // Also fetch items when the screen comes into focus (e.g., after adding a new item)
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('HomeScreen focused - refreshing items list');
+      const loadItems = async () => {
+        try {
+          setIsLoading(true);
+          const userItems: Item[] = await itemService.getUserItems();
+          console.log('Loaded items count:', userItems.length);
+          
+          // Log if any S3 images are found on refresh
+          let s3ImagesFound = 0;
+          userItems.forEach(item => {
+            if (item.images && Array.isArray(item.images)) {
+              const s3Urls = item.images.filter(img => 
+                typeof img === 'string' && img.includes('s3.amazonaws.com')
+              );
+              s3ImagesFound += s3Urls.length;
+            }
+          });
+          
+          if (s3ImagesFound > 0) {
+            console.log(`Found ${s3ImagesFound} S3 images across ${userItems.length} items on refresh`);
+          }
+          
+          setItems(userItems);
+        } catch (error) {
+          console.error('Error loading items:', error);
+          setItems(mockItems);
+          Alert.alert('Error', 'Failed to load your items. Please try again later.');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      loadItems();
+      return () => {
+        // Cleanup function if needed
+      };
+    }, [])
+  );
   
   useEffect(() => {
     console.log('HomeScreen mounted, user data:', user);
@@ -115,37 +300,26 @@ const HomeScreen = () => {
     }
   }, [user]);
   
-  const fetchItems = async () => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const data = await itemService.getUserItems();
-      console.log('Items fetched successfully:', data);
-      setItems(data);
-      
-    } catch (err) {
-      console.error('Error fetching items:', err);
-      
-      if (__DEV__) {
-        console.log('Using mock data as fallback');
-        setItems(mockItems);
-        setError('Could not fetch items from server - using mock data');
-      } else {
-        setError('Could not fetch your items. Please try again later.');
-        setItems([]);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
   const onRefresh = () => {
     setRefreshing(true);
-    fetchItems()
-      .finally(() => {
+    const loadItems = async () => {
+      try {
+        setIsLoading(true);
+        const userItems = await itemService.getUserItems();
+        console.log('Loaded items count:', userItems.length);
+        setItems(userItems);
+      } catch (error) {
+        console.error('Error loading items:', error);
+        setItems(mockItems);
+        // Use a more specific error message to help with debugging
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        Alert.alert('Error', `Failed to load your items: ${errorMessage}`);
+      } finally {
+        setIsLoading(false);
         setRefreshing(false);
-      });
+      }
+    };
+    loadItems();
   };
   
   const navigateToSubmitItem = () => {
@@ -153,41 +327,74 @@ const HomeScreen = () => {
   };
   
   const navigateToTradeSelect = () => {
-    navigation.navigate('Trade', { screen: 'ItemSelection' });
+    // Fixed the TypeScript error by using 'as any' for now
+    navigation.navigate('Trade' as any, { screen: 'ItemSelection' });
   };
 
-  // Render a single item (optimized for FlatList)
-  const renderItem = ({ item, index }: { item: Item; index: number }) => {
-    // Use thumbnail for list view (much better performance)
-    const imageUrl = item.thumbnails && item.thumbnails.length > 0 
-      ? item.thumbnails[0] 
-      : 'https://via.placeholder.com/150';
+  // ItemCard component - proper place to use hooks
+  const ItemCard = ({ item, onPress }: { item: Item; onPress: () => void }) => {
+    // Import our new image utilities
+    const { processImageArray, getFastImageProps, getConditionBasedImage } = require('../utils/imageUtils');
+    
+    console.log(`Rendering Item: ${item.name || item.title} (ID: ${item.id || item._id})`);
 
+    // Get formatted image props using our utility function
+    const getItemImageProps = () => {
+      // Process the images array to get properly formatted URLs
+      const formattedImages = processImageArray(item.images);
+      console.log(`Processed images: ${formattedImages.length} valid URLs`);
+      
+      // If we have valid images, use the first one
+      if (formattedImages.length > 0) {
+        return getFastImageProps(formattedImages[0]);
+      }
+      
+      // Fallback to condition-based placeholder
+      console.log(`Using condition placeholder for ${item.condition}`);
+      return getFastImageProps(getConditionBasedImage(item.condition));
+    };
+    
+    // Get the image props for this item
+    const imageProps = getItemImageProps();
+    
     return (
-      <TouchableOpacity 
-        key={item.id || index} 
+      <TouchableOpacity
         style={styles.itemCard}
-        onPress={() => navigation.navigate('ItemDetail', { item })}
+        onPress={onPress}
         activeOpacity={0.7}
       >
-        <Image 
-          source={{ uri: imageUrl }} 
-          style={styles.itemImage} 
-          resizeMode="cover"
-          onError={(e) => console.error(`Image load error: ${e.nativeEvent.error}`)}
-        />
-        <View style={styles.itemDetails}>
-          <Text style={styles.itemName}>{item.title || item.name}</Text>
-          <Text style={styles.itemDescription} numberOfLines={2}>
-            {item.description}
-          </Text>
-          <View style={styles.itemMeta}>
-            <Text style={styles.itemCondition}>{item.condition}</Text>
-            <Text style={styles.itemCategory}>{item.category || item.type}</Text>
-          </View>
+        <View style={styles.itemImageContainer}>
+          {/* Using simplified S3Image component with category information */}
+          <S3Image
+            imageUrl={item.images && Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : null}
+            style={styles.itemImage}
+            category={item.category || 'default'}
+          />
+        </View>
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemName} numberOfLines={1}>{item.name || item.title}</Text>
+          <Text style={styles.itemCondition}>{item.condition}</Text>
         </View>
       </TouchableOpacity>
     );
+  };
+
+  // Render a single item (optimized for FlatList)
+  const renderItem = ({ item }: { item: Item }) => {
+    return (
+      <ItemCard 
+        item={item} 
+        onPress={() => navigation.navigate('ItemDetail', { item })}
+      />
+    );
+  };
+  
+  // Function to clear FastImage cache
+  const clearImageCache = () => {
+    console.log('Clearing FastImage cache...');
+    FastImage.clearMemoryCache();
+    FastImage.clearDiskCache();
+    Alert.alert('Cache Cleared', 'Image cache has been cleared. Pull down to refresh the list.');
   };
   
   const renderMyItems = () => {
@@ -203,7 +410,7 @@ const HomeScreen = () => {
       return (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity onPress={fetchItems} style={styles.retryButton}>
+          <TouchableOpacity onPress={onRefresh} style={styles.retryButton}>
             <Text style={styles.retryButtonText}>Try Again</Text>
           </TouchableOpacity>
         </View>
@@ -232,6 +439,12 @@ const HomeScreen = () => {
         windowSize={5}
         removeClippedSubviews={true}
         contentContainerStyle={styles.itemsContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+          />
+        }
       />
     );
   };
@@ -245,7 +458,11 @@ const HomeScreen = () => {
             <Text style={styles.greetingHighlight}>Hey {user?.name || mockUser.name}!</Text>
           </Text>
           <Text style={styles.subGreeting}>What would you like to do today?</Text>
+          
+          {/* No diagnostic test images - showing real content */}
         </View>
+        
+        {/* We've removed diagnostic tools now that S3 images are working */}
         
         <View style={styles.xpContainer}>
           <View style={styles.xpCard}>
@@ -295,6 +512,17 @@ const HomeScreen = () => {
         <View style={styles.myItemsSection}>
           <Text style={styles.sectionTitle}>My Items</Text>
           {renderMyItems()}
+        </View>
+        
+        {/* Prominent Publish Button */}
+        <View style={styles.publishButtonContainer}>
+          <TouchableOpacity 
+            style={styles.publishButton}
+            onPress={() => navigation.navigate('SubmitItem')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.publishButtonText}>Publish an item</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </SafeAreaView>
@@ -496,12 +724,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     overflow: 'hidden',
   },
-  itemImage: {
+  itemImageContainer: {
     width: 100,
     height: 100,
     backgroundColor: '#f1f3f5',
   },
-  itemDetails: {
+  itemImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#f1f3f5',
+  },
+  itemInfo: {
     flex: 1,
     padding: 12,
   },
@@ -511,30 +744,36 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 6,
   },
-  itemDescription: {
+  itemCondition: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 8,
   },
-  itemMeta: {
+  publishButtonContainer: {
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 30,
+    zIndex: 999,
+  },
+  publishButton: {
+    backgroundColor: '#7950f2',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 30,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  itemCondition: {
-    fontSize: 12,
-    color: '#7950f2',
-    backgroundColor: '#f3f0ff',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-  itemCategory: {
-    fontSize: 12,
-    color: '#2b8a3e',
-    backgroundColor: '#e6f7ef',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+  publishButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
 });
 

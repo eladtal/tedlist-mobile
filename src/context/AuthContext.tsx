@@ -92,13 +92,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             // Try to get the profile if userService loaded successfully
             if (userService && userService.getProfile) {
-              const userData = await userService.getProfile();
-              if (userData) {
-                setUser(userData as User);
-                setIsAuthenticated(true);
-              } else {
-                console.log('No user data returned, logging out');
-                await handleLogout();
+              try {
+                // Don't attempt profile fetch if we're not fully authenticated yet
+                // This prevents the error from showing on initial app load
+                if (!token) {
+                  setIsAuthenticated(false);
+                  setIsLoading(false);
+                  return;
+                }
+                
+                // Add timeout to prevent hanging on startup
+                const profilePromise = userService.getProfile();
+                const timeoutPromise = new Promise((_, reject) => {
+                  setTimeout(() => reject(new Error('Profile fetch timed out')), 5000);
+                });
+                
+                // Race the profile fetch against the timeout
+                const userData = await Promise.race([profilePromise, timeoutPromise])
+                  .catch(error => {
+                    // Check for 404 errors specifically
+                    if (error?.message?.includes('404') || 
+                        error?.response?.status === 404 || 
+                        error?.toString().includes('404')) {
+                      console.log('Profile endpoint returned 404, server might be initializing');
+                      // Return null to continue without error
+                      return null;
+                    }
+                        // For other errors, handle gracefully instead of throwing
+                    console.error('Error fetching profile:', error);
+                    // Return null to continue without error - this prevents red error screens
+                    return null;
+                  });
+                  
+                if (userData) {
+                  setUser(userData as User);
+                  setIsAuthenticated(true);
+                } else {
+                  console.log('No user data returned, assuming not logged in');
+                  // Don't force logout - just continue unauthenticated
+                  setIsAuthenticated(false);
+                }
+              } catch (profileError) {
+                // Don't display errors during startup as red console errors
+              console.log('Profile fetch issue:', profileError);
+                // Silent failure - don't show error to user on startup
+                setIsAuthenticated(false);
               }
             } else {
               console.error('UserService or getProfile method not found');

@@ -13,6 +13,7 @@ import MainTabNavigator from './MainTabNavigator';
 import SubmitItemScreen from '../screens/SubmitItemScreen';
 import AdminPanelScreen from '../screens/AdminPanelScreen';
 import ItemDetailScreen from '../screens/ItemDetailScreen';
+import ImageTest from '../components/ImageTest';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -60,6 +61,11 @@ const AppNavigator = () => {
                 name="ItemDetail" 
                 component={ItemDetailScreen}
                 options={{ title: 'Item Details' }}
+              />
+              <Stack.Screen 
+                name="ImageTest" 
+                component={ImageTest}
+                options={{ title: 'Image Diagnostic Tool' }}
               />
             </Stack.Group>
           </>

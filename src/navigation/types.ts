@@ -29,6 +29,7 @@ export type RootStackParamList = {
   SubmitItem: undefined;
   AdminPanel: undefined;
   ItemDetail: { item: any };
+  ImageTest: { serverUrls?: string[] };
 };
 
 // Declaration merging for useNavigation hook type safety
