@@ -11,9 +11,11 @@ import {
   StatusBar,
   Dimensions,
   Platform,
-  Image
+  Image,
+  Animated
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MainTabParamList, RootStackParamList } from '../navigation/types';
 import { useAuth } from '../context/AuthContext'; 
@@ -109,6 +111,9 @@ const HomeScreen = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   const xp = 120;
   const xpGoal = 500;
@@ -331,6 +336,70 @@ const HomeScreen = () => {
     navigation.navigate('Trade' as any, { screen: 'ItemSelection' });
   };
 
+  // Toggle selection mode
+  const toggleSelectionMode = () => {
+    setIsSelectionMode(!isSelectionMode);
+    setSelectedItems([]);
+  };
+
+  // Toggle item selection
+  const toggleItemSelection = (itemId: string) => {
+    setSelectedItems(prevSelected => {
+      if (prevSelected.includes(itemId)) {
+        return prevSelected.filter(id => id !== itemId);
+      } else {
+        return [...prevSelected, itemId];
+      }
+    });
+  };
+
+  // Handle batch delete of selected items
+  const handleBatchDelete = () => {
+    if (selectedItems.length === 0) return;
+
+    Alert.alert(
+      'Delete Items',
+      `Are you sure you want to delete ${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''}? This action cannot be undone.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsDeleting(true);
+              
+              // Delete each selected item
+              const deletePromises = selectedItems.map(id => itemService.deleteItem(id));
+              await Promise.all(deletePromises);
+              
+              // Remove deleted items from state
+              setItems(prevItems => prevItems.filter(item => !selectedItems.includes(item.id)));
+              
+              // Reset selection state
+              setSelectedItems([]);
+              setIsSelectionMode(false);
+              
+              Alert.alert('Success', 'Items have been deleted successfully');
+            } catch (error) {
+              console.error('Error deleting items:', error);
+              Alert.alert(
+                'Error',
+                'Failed to delete some items. Please try again later.',
+                [{ text: 'OK' }]
+              );
+            } finally {
+              setIsDeleting(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   // ItemCard component - proper place to use hooks
   const ItemCard = ({ item, onPress }: { item: Item; onPress: () => void }) => {
     // Import our new image utilities
@@ -357,12 +426,38 @@ const HomeScreen = () => {
     // Get the image props for this item
     const imageProps = getItemImageProps();
     
+    const isSelected = selectedItems.includes(item.id);
+    
+    const handleCardPress = () => {
+      if (isSelectionMode) {
+        toggleItemSelection(item.id);
+      } else {
+        onPress();
+      }
+    };
+    
     return (
       <TouchableOpacity
-        style={styles.itemCard}
-        onPress={onPress}
+        style={[styles.itemCard, isSelected && styles.selectedItemCard]}
+        onPress={handleCardPress}
+        onLongPress={() => {
+          if (!isSelectionMode) {
+            setIsSelectionMode(true);
+            toggleItemSelection(item.id);
+          }
+        }}
         activeOpacity={0.7}
+        delayLongPress={300}
       >
+        {isSelectionMode && (
+          <View style={styles.checkboxContainer}>
+            <MaterialIcons 
+              name={isSelected ? 'check-circle' : 'radio-button-unchecked'} 
+              size={24} 
+              color={isSelected ? '#7950f2' : '#adb5bd'}
+            />
+          </View>
+        )}
         <View style={styles.itemImageContainer}>
           {/* Using simplified S3Image component with category information */}
           <S3Image
@@ -377,10 +472,6 @@ const HomeScreen = () => {
         </View>
       </TouchableOpacity>
     );
-    console.log('Clearing FastImage cache...');
-    FastImage.clearMemoryCache();
-    FastImage.clearDiskCache();
-    Alert.alert('Cache Cleared', 'Image cache has been cleared. Pull down to refresh the list.');
   };
   
   const renderMyItems = () => {
@@ -415,28 +506,67 @@ const HomeScreen = () => {
     }
     
     return (
-      <FlatList
-        data={items}
-        renderItem={({ item }) => (
-          <ItemCard 
-            item={item} 
-            onPress={() => navigation.navigate('ItemDetail', { item })}
-          />
+      <View style={{ flex: 1 }}>
+        {/* Selection mode header */}
+        {isSelectionMode && (
+          <View style={styles.selectionModeHeader}>
+            <Text style={styles.selectionCountText}>
+              {selectedItems.length} {selectedItems.length === 1 ? 'item' : 'items'} selected
+            </Text>
+            <View style={styles.selectionActions}>
+              {selectedItems.length > 0 && (
+                <TouchableOpacity 
+                  style={styles.deleteSelectedButton} 
+                  onPress={handleBatchDelete}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.deleteSelectedText}>Delete</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.cancelSelectionButton} onPress={toggleSelectionMode}>
+                <Text style={styles.cancelSelectionText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
-        keyExtractor={(item, index) => item.id || index.toString()}
-        showsVerticalScrollIndicator={false}
-        initialNumToRender={4}
-        maxToRenderPerBatch={10}
-        windowSize={5}
-        removeClippedSubviews={true}
-        contentContainerStyle={styles.itemsContainer}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-          />
-        }
-      />
+        
+        <FlatList
+          data={items}
+          renderItem={({ item }) => (
+            <ItemCard 
+              item={item} 
+              onPress={() => navigation.navigate('ItemDetail', { item })}
+            />
+          )}
+          keyExtractor={(item, index) => item.id || index.toString()}
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={4}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={true}
+          contentContainerStyle={styles.itemsContainer}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+            />
+          }
+        />
+        
+        {!isSelectionMode && items.length > 0 && (
+          <TouchableOpacity 
+            style={styles.selectModeButton}
+            onPress={toggleSelectionMode}
+          >
+            <MaterialIcons name="playlist-add-check" size={20} color="#fff" />
+            <Text style={styles.selectModeButtonText}>Select Items</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     );
   };
   
@@ -714,6 +844,21 @@ const styles = StyleSheet.create({
     elevation: 2,
     flexDirection: 'row',
     overflow: 'hidden',
+    position: 'relative',
+  },
+  selectedItemCard: {
+    backgroundColor: '#f0ebff',
+    borderWidth: 2,
+    borderColor: '#7950f2',
+  },
+  checkboxContainer: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    zIndex: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 12,
+    padding: 2,
   },
   itemImageContainer: {
     width: 100,
@@ -765,6 +910,68 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 8,
+  },
+  selectionModeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#7950f2',
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  selectionCountText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  selectionActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  deleteSelectedButton: {
+    backgroundColor: '#e53935',
+    paddingHorizontal: 15,
+    paddingVertical: 6,
+    borderRadius: 4,
+    marginRight: 10,
+  },
+  deleteSelectedText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  cancelSelectionButton: {
+    paddingHorizontal: 15,
+    paddingVertical: 6,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
+  cancelSelectionText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  selectModeButton: {
+    position: 'absolute',
+    right: 15,
+    bottom: 90,
+    backgroundColor: '#7950f2',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  selectModeButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    marginLeft: 5,
   },
 });
 
