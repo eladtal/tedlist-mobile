@@ -327,6 +327,16 @@ const SubmitItemScreen = () => {
             // Try S3 upload first
             uploadedUrl = await itemService.uploadItemImage(image.uri);
             console.log(`Image ${i+1} successfully uploaded to S3!`);
+            console.log(`Raw uploaded URL: ${uploadedUrl}`);
+            
+            // CRITICAL FIX: Extract just the filename from the URL
+            // This ensures MongoDB stores the actual filename, not the full URL
+            const filename = uploadedUrl.split('/').pop();
+            if (filename) {
+              // Use just the filename - this is critical for MongoDB storage
+              console.log(`Extracted filename for MongoDB: ${filename}`);
+              uploadedUrl = filename;
+            }
           } catch (s3Error: any) { // Cast to any for error handling
             // S3 upload failed, use local fallback approach
             console.warn(`S3 upload failed: ${s3Error}. Using local image fallback.`);
@@ -390,22 +400,28 @@ const SubmitItemScreen = () => {
         await AsyncStorage.setItem(storageKey, JSON.stringify(localImageUris));
         console.log(`Saved local images to AsyncStorage with key: ${storageKey}`);
         
+        // Debug - print detailed info about the images we're uploading
+        console.log('DETAILED IMAGE DEBUG INFO:');
+        console.log(`Total images to upload: ${images.length}`);
+        console.log(`Uploaded image URLs: ${JSON.stringify(uploadedImageUrls)}`);
+        
         // Prepare item data with storage key reference and the first local URI directly embedded
         const itemData: CreateItemRequest = {
           name: title,
           description: description || 'No description provided',
           category: selectedCategory || 'Other',
           condition: selectedCondition || 'Good',
-          // Always include local image URIs if we have them, regardless of uploadedImageUrls
-          images: uploadedImageUrls.length > 0 ? uploadedImageUrls : localImageUris,
+          // CRITICAL FIX: Always save the filenames to MongoDB
+          // This ensures the backend has the correct image references
+          images: uploadedImageUrls.length > 0 ? uploadedImageUrls : [],
           imageStorageKey: storageKey,
           localImageUri: localImageUris.length > 0 ? localImageUris[0] : undefined,
           // Add server status flag to indicate if we're using fallback
-          usingLocalImages: uploadedImageUrls.length === 0 
+          usingLocalImages: uploadedImageUrls.length === 0 && localImageUris.length > 0
         };
         
         setUploadProgress(80);
-        console.log('Creating item with data:', itemData);
+        console.log('Creating item with data:', JSON.stringify(itemData));
         
         // Use real API to create the item
         const createdItem = await itemService.createItem(itemData);

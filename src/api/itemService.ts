@@ -10,67 +10,62 @@ const IMAGE_PROXY_URL = `${SERVER_URL}/api/images`;
 const S3_BUCKET_NAME = 'tedlist-app-uploads';
 const S3_BASE_URL = `https://${S3_BUCKET_NAME}.s3.amazonaws.com`;
 
+
+
 // Helper function to ensure image URLs are properly formatted
 const ensureAbsoluteImageUrl = (imageUrl: string): string => {
   // Return empty string for null/undefined/empty values
-  if (!imageUrl) return '';
+  if (!imageUrl) {
+    console.log('[itemService] No image URL provided');
+    return '';
+  }
   console.log(`[itemService] Processing imageUrl: ${imageUrl}`);
   
-  // If it already contains S3 domain, ensure it has https:// prefix
+  // If it's already using our proxy, clean up the URL if needed
+  if (imageUrl.startsWith(IMAGE_PROXY_URL)) {
+    const urlParts = imageUrl.split('/');
+    const filename = urlParts[urlParts.length - 1].replace(/^images-/, '');
+    const cleanUrl = `${IMAGE_PROXY_URL}/${filename}`;
+    console.log('[itemService] Cleaned proxy URL:', cleanUrl);
+    return cleanUrl;
+  }
+  
+  // If it's an S3 URL, convert to proxy URL
   if (imageUrl.includes('s3.amazonaws.com')) {
-    return imageUrl.startsWith('http') ? imageUrl : `https://${imageUrl.replace(/^[/]+/, '')}`;
-  }
-  
-  // If it's already a complete URL (http/https), return as is
-  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-    return imageUrl;
-  }
-  
-  // Extract the filename from any path
-  const getFilename = (path: string): string => {
-    // Remove all path prefixes, just keep the filename
-    const cleaned = path.replace(/^.*[\/\\]/, '');
-    console.log(`[itemService] Extracted filename: ${cleaned}`);
-    return cleaned;
-  };
-  
-  // Extract just the filename - this is key to avoiding path duplication
-  const filename = getFilename(imageUrl);
-
-  // TEMPORARY SOLUTION: Use placeholder images while server endpoint is being set up
-  const categoryMap: Record<string, string> = {
-    'electronics': 'https://via.placeholder.com/300/2196F3/FFFFFF?text=Electronics',
-    'furniture': 'https://via.placeholder.com/300/4CAF50/FFFFFF?text=Furniture',
-    'clothing': 'https://via.placeholder.com/300/FFC107/FFFFFF?text=Clothing',
-    'books': 'https://via.placeholder.com/300/9C27B0/FFFFFF?text=Books',
-    'toys': 'https://via.placeholder.com/300/E91E63/FFFFFF?text=Toys',
-    'other': 'https://via.placeholder.com/300/607D8B/FFFFFF?text=Item'
-  };
-  
-  // Check if the filename contains any category keywords for better placeholders
-  let placeholderCategory = 'other';
-  Object.keys(categoryMap).forEach(category => {
-    if (filename.toLowerCase().includes(category)) {
-      placeholderCategory = category;
+    let filename = imageUrl.split(/[\/\\]/).pop();
+    // Remove images- prefix if it exists
+    filename = filename?.replace(/^images-/, '');
+    if (!filename) {
+      console.log('[itemService] Could not extract filename from S3 URL:', imageUrl);
+      return '';
     }
-  });
+    const proxyUrl = `${IMAGE_PROXY_URL}/${filename}`;
+    console.log('[itemService] Converted S3 URL to proxy URL:', proxyUrl);
+    return proxyUrl;
+  }
   
-  // Get a visually appealing placeholder based on the item category
-  const placeholderUrl = categoryMap[placeholderCategory];
+  // Check if the image URL is just a filename (no slashes)
+  if (!imageUrl.includes('/') && !imageUrl.includes('\\')) {
+    console.log('[itemService] Appears to be just a filename:', imageUrl);
+    // Remove any images- prefix if it exists
+    const cleanFilename = imageUrl.replace(/^images-/, '');
+    const proxyUrl = `${IMAGE_PROXY_URL}/${cleanFilename}`;
+    console.log('[itemService] Created proxy URL from filename:', proxyUrl);
+    return proxyUrl;
+  }
   
-  console.log(`[itemService] Using placeholder: ${placeholderUrl}`);
-  return placeholderUrl;
+  // If it's a relative path (e.g., 'uploads/image.jpg'), extract filename and use proxy
+  let filename = imageUrl.split(/[\/\\]/).pop();
+  // Remove images- prefix if it exists
+  filename = filename?.replace(/^images-/, '');
+  if (!filename) {
+    console.log('[itemService] Could not extract filename from path:', imageUrl);
+    return '';
+  }
   
-  // For other relative paths, use API base URL
-  const baseUrl = API_BASE_URL.endsWith('/') 
-    ? API_BASE_URL.slice(0, -1) 
-    : API_BASE_URL;
-    
-  const imagePath = imageUrl.startsWith('/') 
-    ? imageUrl 
-    : `/${imageUrl}`;
-    
-  return `${baseUrl}${imagePath}`;
+  const proxyUrl = `${IMAGE_PROXY_URL}/${filename}`;
+  console.log('[itemService] Created proxy URL from path:', proxyUrl);
+  return proxyUrl;
 };
 
 // Helper function specifically for thumbnails
@@ -199,11 +194,22 @@ const getUserItems = async (): Promise<Item[]> => {
     // Transform backend data to match expected mobile app format
     if (Array.isArray(response.data)) {
       console.log(`Found ${response.data.length} items for the user`);
+      
+      // Log image URLs for debugging
+      response.data.forEach((item, index) => {
+        console.log(`
+[Item ${index + 1}]: ${item.name || item.title}`);
+        if (item.images && Array.isArray(item.images)) {
+          console.log('Raw image URLs:', item.images);
+        } else {
+          console.log('No images array found');
+        }
+      });
       const transformedItems = response.data.map((item: any) => {
         // Simple image processing - use ensureAbsoluteImageUrl for all images
         const processedImages = Array.isArray(item.images) && item.images.length > 0
-          ? item.images.map((img: string) => ensureAbsoluteImageUrl(img))
-          : ['https://picsum.photos/id/1/200/300']; // Default image if no images
+          ? item.images.map((img: string) => ensureAbsoluteImageUrl(img)).filter((url: string) => url !== '')
+          : []; // No default image, empty array if no images
         
         return {
           id: item._id || item.id || '',
@@ -241,10 +247,22 @@ const getUserItems = async (): Promise<Item[]> => {
         // Items nested in 'items' property
         console.log(`Found ${response.data.items.length} items in nested 'items' property`);
         return response.data.items.map((item: any) => {
-          // Simple image processing - use ensureAbsoluteImageUrl for all images
+          // Process images from MongoDB
+          // Log original images for debugging
+          console.log('[itemService] Original images from MongoDB:', JSON.stringify(item.images));
+          
+          // Simple image processing - use ensureAbsoluteImageUrl for all images and avoid empties
           const processedImages = Array.isArray(item.images) && item.images.length > 0
-            ? item.images.map((img: string) => ensureAbsoluteImageUrl(img))
-            : ['https://picsum.photos/id/1/200/300']; // Default image if no images
+            ? item.images
+                .filter((img: string) => img && img.trim() !== '') // Filter out empty strings first
+                .map((img: string) => {
+                  console.log('[itemService] Processing MongoDB image:', img);
+                  return ensureAbsoluteImageUrl(img);
+                })
+                .filter((url: string) => url !== '') // Filter out any that didn't process properly
+            : []; // No default image, empty array if no images
+          
+          console.log('[itemService] Processed images:', JSON.stringify(processedImages));
             
           return {
             id: item._id || item.id || '',

@@ -10,9 +10,8 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Define reliable fallback images that we know work
-const FALLBACK_IMAGES = [
-  'https://firebasestorage.googleapis.com/v0/b/tedlist-dummy.appspot.com/o/placeholder.jpg?alt=media',
-  'https://picsum.photos/200',
+const FALLBACK_IMAGES: string[] = [
+  // No fallback images - we only want to show real S3 images or nothing
 ];
 
 interface ReliableImageProps extends ImageProps {

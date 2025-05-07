@@ -377,20 +377,6 @@ const HomeScreen = () => {
         </View>
       </TouchableOpacity>
     );
-  };
-
-  // Render a single item (optimized for FlatList)
-  const renderItem = ({ item }: { item: Item }) => {
-    return (
-      <ItemCard 
-        item={item} 
-        onPress={() => navigation.navigate('ItemDetail', { item })}
-      />
-    );
-  };
-  
-  // Function to clear FastImage cache
-  const clearImageCache = () => {
     console.log('Clearing FastImage cache...');
     FastImage.clearMemoryCache();
     FastImage.clearDiskCache();
@@ -431,7 +417,12 @@ const HomeScreen = () => {
     return (
       <FlatList
         data={items}
-        renderItem={renderItem}
+        renderItem={({ item }) => (
+          <ItemCard 
+            item={item} 
+            onPress={() => navigation.navigate('ItemDetail', { item })}
+          />
+        )}
         keyExtractor={(item, index) => item.id || index.toString()}
         showsVerticalScrollIndicator={false}
         initialNumToRender={4}
