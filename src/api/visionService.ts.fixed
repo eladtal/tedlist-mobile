@@ -111,7 +111,7 @@ export const analyzeImageUrl = async (imageUrl: string): Promise<AnalysisResult>
 export const testVisionApi = async (): Promise<any> => {
   try {
     console.log('Testing Vision API connection');
-    const response = await fetch(`${API_BASE_URL}/api/vision/test`);
+    const response = await fetch(`${API_BASE_URL}/vision/test`);
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -134,7 +134,7 @@ export const testVisionApi = async (): Promise<any> => {
 export const debugVisionApi = async (): Promise<any> => {
   try {
     console.log('Debugging Vision API');
-    const response = await fetch(`${API_BASE_URL}/api/vision/debug`);
+    const response = await fetch(`${API_BASE_URL}/vision/debug`);
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -203,8 +203,8 @@ export const analyzeImageTest = async (imageUri: string): Promise<AnalysisResult
     console.log('API_BASE_URL:', API_BASE_URL);
     console.log('Full endpoint path:', ENDPOINTS.VISION.ANALYZE_IMAGE);
     
-    // Set endpoint for image analysis
-    const endpoint = `${API_BASE_URL}${ENDPOINTS.VISION.ANALYZE_IMAGE}`;
+    // FIXED: Directly use the /vision path format that works with Render
+    const endpoint = `${API_BASE_URL}/vision/analyze-test`;
     console.log('Final API endpoint being called:', endpoint);
     
     // Make the API request without auth token (test endpoint)
