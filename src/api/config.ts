@@ -75,6 +75,12 @@ export const ENDPOINTS = {
     GET_ALL: '/api/notifications',
     MARK_READ: (id: string) => `/api/notifications/${id}/read`,
     MARK_ALL_READ: '/api/notifications/read-all',
+  },
+  
+  // Vision API endpoints
+  VISION: {
+    ANALYZE_IMAGE: '/api/vision/analyze-test', // Using test endpoint for now
+    ANALYZE_URL: '/api/vision/analyze-url-test', // Using test endpoint for now
   }
 };
 

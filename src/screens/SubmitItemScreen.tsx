@@ -24,10 +24,12 @@ import { useNavigation } from '@react-navigation/native';
 import { launchCamera, launchImageLibrary, Asset } from 'react-native-image-picker';
 import { CameraRoll } from '@react-native-camera-roll/camera-roll';
 import itemService from '../api/itemService';
+import visionService from '../api/visionService';
 import { useAuth } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FastImage from 'react-native-fast-image';
 import { API_BASE_URL } from '../api/config';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 // Categories for selection
 const CATEGORIES = [
@@ -76,6 +78,10 @@ const SubmitItemScreen = () => {
   // Upload state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  
+  // Vision API state
+  const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
+  const [analysisResults, setAnalysisResults] = useState<any>(null);
   
   // Check and request camera permissions if needed
   const requestCameraPermission = async () => {
@@ -466,6 +472,94 @@ const SubmitItemScreen = () => {
     }
   }, [title, description, images, selectedCategory, selectedCondition, navigation, isFormValid]);
   
+  // Test Vision API connectivity
+  const handleTestVisionApi = useCallback(async () => {
+    try {
+      setIsAnalyzingImage(true);
+      console.log('Testing Vision API connectivity...');
+      
+      // Try basic test endpoint first
+      const testResult = await visionService.testVisionApi();
+      console.log('Basic test result:', testResult);
+      
+      // Try debug endpoint
+      const debugResult = await visionService.debugVisionApi();
+      console.log('Debug result:', debugResult);
+      
+      // Show results
+      Alert.alert(
+        'Vision API Test Results',
+        `Test endpoint: ${JSON.stringify(testResult)}\n\nDebug endpoint: ${JSON.stringify(debugResult)}`,
+        [{ text: 'OK' }]
+      );
+      
+    } catch (error) {
+      console.error('Error testing Vision API:', error);
+      Alert.alert(
+        'Vision API Test Failed',
+        `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    } finally {
+      setIsAnalyzingImage(false);
+    }
+  }, []);
+  
+  // Use Vision API to analyze image and get item description
+  const handleAnalyzeImage = useCallback(async () => {
+    if (images.length === 0) {
+      Alert.alert('No Image', 'Please take or select a photo first.');
+      return;
+    }
+    
+    try {
+      setIsAnalyzingImage(true);
+      
+      // Use the first image for analysis
+      const imageUri = images[0].uri;
+      console.log('Analyzing image:', imageUri);
+      
+      // Variable to store analysis result
+      let analysisResult;
+      
+      // Only use the test endpoint - with our mock implementation
+      // This will work even if the backend is having issues
+      analysisResult = await visionService.analyzeImageTest(imageUri);
+      
+      console.log('Analysis results:', analysisResult);
+      
+      // Store results
+      setAnalysisResults(analysisResult);
+      
+      // Update form fields with analysis results
+      if (analysisResult.title) setTitle(analysisResult.title);
+      if (analysisResult.description) setDescription(analysisResult.description);
+      if (analysisResult.category) setSelectedCategory(analysisResult.category);
+      if (analysisResult.condition) setSelectedCondition(analysisResult.condition);
+      
+      // Show success message
+      Platform.OS === 'android' && ToastAndroid.show(
+        'Analysis complete! Details updated.', 
+        ToastAndroid.SHORT
+      );
+      
+      // Open an alert with the analysis results for transparency
+      Alert.alert(
+        'Image Analysis Complete', 
+        `We've updated the form with these item details:\n\nName: ${analysisResult.title}\nCategory: ${analysisResult.category}\nCondition: ${analysisResult.condition}\n\nYou can edit any of these details before submitting.`,
+        [{ text: 'OK' }]
+      );
+      
+    } catch (error) {
+      console.error('Error analyzing image:', error);
+      Alert.alert(
+        'Analysis Error', 
+        'Failed to analyze the image. Please fill in the details manually.'
+      );
+    } finally {
+      setIsAnalyzingImage(false);
+    }
+  }, [images]);
+  
   // Helper function to ensure URLs are absolute with proper format
   const ensureFullUrl = (url: string): string => {
     if (!url) return '';
@@ -656,6 +750,40 @@ const SubmitItemScreen = () => {
               <Text style={styles.submitButtonText}>Submit Item</Text>
             )}
           </TouchableOpacity>
+          
+          {/* AI Analysis Button */}
+          {images.length > 0 && (
+            <TouchableOpacity 
+              style={styles.analyzeButton}
+              onPress={handleAnalyzeImage}
+              disabled={isAnalyzingImage}
+            >
+              {isAnalyzingImage ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <View style={styles.analyzeButtonContent}>
+                  <MaterialIcons name="auto-awesome" size={20} color="#fff" />
+                  <Text style={styles.analyzeButtonText}>Auto-Generate Details</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
+          
+          {/* API Test Button */}
+          <TouchableOpacity 
+            style={[styles.testButton, isAnalyzingImage && styles.buttonDisabled]}
+            onPress={handleTestVisionApi}
+            disabled={isAnalyzingImage}
+          >
+            {isAnalyzingImage ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <View style={styles.analyzeButtonContent}>
+                <MaterialIcons name="bug-report" size={20} color="#fff" />
+                <Text style={styles.analyzeButtonText}>Test API Connection</Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -825,6 +953,43 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 8,
+  },
+  analyzeButton: {
+    backgroundColor: '#7950f2',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    marginTop: 15,
+    marginBottom: 5,
+    alignSelf: 'center',
+  },
+  analyzeButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  analyzeButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  testButton: {
+    backgroundColor: '#ff9800',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    marginTop: 10,
+    marginBottom: 20,
+    alignSelf: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
 });
 
