@@ -8,10 +8,10 @@
 const PRODUCTION_API_URL = 'https://tedlist-backend.onrender.com';
 
 // For Android Emulator local testing (if needed)
-const EMULATOR_LOCAL_API_URL = 'http://10.0.2.2:5000';
+const EMULATOR_LOCAL_API_URL = 'http://10.0.2.2:8000';
 
 // For Physical Device local testing (if needed)
-const PHYSICAL_DEVICE_LOCAL_API_URL = 'http://192.168.1.100:5000';
+const PHYSICAL_DEVICE_LOCAL_API_URL = 'http://192.168.1.100:8000';
 
 // Choose which URL to use based on your testing needs
 // For connecting to your deployed render.com backend:

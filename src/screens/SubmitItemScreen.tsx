@@ -472,38 +472,6 @@ const SubmitItemScreen = () => {
     }
   }, [title, description, images, selectedCategory, selectedCondition, navigation, isFormValid]);
   
-  // Test Vision API connectivity
-  const handleTestVisionApi = useCallback(async () => {
-    try {
-      setIsAnalyzingImage(true);
-      console.log('Testing Vision API connectivity...');
-      
-      // Try basic test endpoint first
-      const testResult = await visionService.testVisionApi();
-      console.log('Basic test result:', testResult);
-      
-      // Try debug endpoint
-      const debugResult = await visionService.debugVisionApi();
-      console.log('Debug result:', debugResult);
-      
-      // Show results
-      Alert.alert(
-        'Vision API Test Results',
-        `Test endpoint: ${JSON.stringify(testResult)}\n\nDebug endpoint: ${JSON.stringify(debugResult)}`,
-        [{ text: 'OK' }]
-      );
-      
-    } catch (error) {
-      console.error('Error testing Vision API:', error);
-      Alert.alert(
-        'Vision API Test Failed',
-        `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    } finally {
-      setIsAnalyzingImage(false);
-    }
-  }, []);
-  
   // Use Vision API to analyze image and get item description
   const handleAnalyzeImage = useCallback(async () => {
     if (images.length === 0) {
@@ -769,21 +737,7 @@ const SubmitItemScreen = () => {
             </TouchableOpacity>
           )}
           
-          {/* API Test Button */}
-          <TouchableOpacity 
-            style={[styles.testButton, isAnalyzingImage && styles.buttonDisabled]}
-            onPress={handleTestVisionApi}
-            disabled={isAnalyzingImage}
-          >
-            {isAnalyzingImage ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <View style={styles.analyzeButtonContent}>
-                <MaterialIcons name="bug-report" size={20} color="#fff" />
-                <Text style={styles.analyzeButtonText}>Test API Connection</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          {/* API Test Button removed - no longer needed since Vision API is working */}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
