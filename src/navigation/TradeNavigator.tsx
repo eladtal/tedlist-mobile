@@ -2,9 +2,9 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { TradeStackParamList } from './types';
 
-// Import screens (to be implemented)
+// Import screens for trade flow
 import ItemSelectionScreen from '../screens/ItemSelectionScreen';
-import SwipeScreen from '../screens/SwipeScreen';
+import TradeRequestScreen from '../screens/TradeRequestScreen';
 
 const Stack = createNativeStackNavigator<TradeStackParamList>();
 
@@ -23,9 +23,9 @@ const TradeNavigator = () => {
         options={{ title: 'Select an Item' }}
       />
       <Stack.Screen 
-        name="Swipe" 
-        component={SwipeScreen} 
-        options={{ title: 'Find Trades' }}
+        name="TradeRequest" 
+        component={TradeRequestScreen} 
+        options={{ title: 'Trade Request' }}
       />
     </Stack.Navigator>
   );

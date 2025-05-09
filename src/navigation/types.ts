@@ -20,6 +20,7 @@ export type MainTabParamList = {
 export type TradeStackParamList = {
   ItemSelection: undefined;
   Swipe: { selectedItemId?: string };
+  TradeRequest: { item: any };
 };
 
 // Root navigation param list combines auth and main flows

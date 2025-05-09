@@ -100,6 +100,82 @@ const mockItems: Item[] = [
   }
 ];
 
+// Items from other users that could be used for trading
+const otherUsersItems: Item[] = [
+  {
+    id: '101',
+    title: 'Vintage Film Camera',
+    name: 'Vintage Film Camera',
+    description: 'Classic film camera from the 1970s. Perfect for photography enthusiasts. Works great and produces beautiful analog photos.',
+    condition: 'Good',
+    category: 'Electronics',
+    type: 'trade',
+    images: ['https://source.unsplash.com/featured/?vintagecamera'],
+    thumbnails: ['https://source.unsplash.com/featured/?vintagecamera'],
+    owner: {
+      id: '456',
+      name: 'Emily'
+    },
+    status: 'available',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: '102',
+    title: 'Indoor Plant Set',
+    name: 'Indoor Plant Set',
+    description: 'Collection of 3 small indoor plants. Easy to care for and perfect for adding greenery to any room. Includes succulents and snake plant.',
+    condition: 'Excellent',
+    category: 'Home & Garden',
+    type: 'trade',
+    images: ['https://source.unsplash.com/featured/?houseplants'],
+    thumbnails: ['https://source.unsplash.com/featured/?houseplants'],
+    owner: {
+      id: '789',
+      name: 'Sophia'
+    },
+    status: 'available',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: '103',
+    title: 'Strategy Board Game',
+    name: 'Strategy Board Game',
+    description: 'Popular strategy board game, complete with all pieces. Great for game nights with friends and family. For 2-6 players.',
+    condition: 'Like New',
+    category: 'Games & Toys',
+    type: 'trade',
+    images: ['https://source.unsplash.com/featured/?boardgame'],
+    thumbnails: ['https://source.unsplash.com/featured/?boardgame'],
+    owner: {
+      id: '321',
+      name: 'Marcus'
+    },
+    status: 'available',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: '104',
+    title: 'Adventure Hiking Backpack',
+    name: 'Adventure Hiking Backpack',
+    description: 'Sturdy hiking backpack with multiple compartments. Water-resistant material and comfortable shoulder straps. Perfect for day hikes.',
+    condition: 'Good',
+    category: 'Sports & Outdoors',
+    type: 'trade',
+    images: ['https://source.unsplash.com/featured/?hikingbackpack'],
+    thumbnails: ['https://source.unsplash.com/featured/?hikingbackpack'],
+    owner: {
+      id: '654',
+      name: 'Olivia'
+    },
+    status: 'available',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+];
+
 // Mock user data
 const mockUser = {
   name: 'Alex',
