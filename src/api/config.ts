@@ -45,8 +45,9 @@ export const ENDPOINTS = {
   
   // User endpoints
   USER: {
-    PROFILE: '/api/users/profile',
-    UPDATE_PROFILE: '/api/users/profile',
+    // Use auth/validate endpoint instead of non-existent users/profile
+    PROFILE: '/api/auth/validate',
+    UPDATE_PROFILE: '/api/auth/update', // This will need to be implemented on backend
   },
   
   // Item endpoints

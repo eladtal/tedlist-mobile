@@ -12,8 +12,10 @@ import {
   Dimensions,
   Platform,
   Image,
-  Animated
+  Animated,
+  ScrollView
 } from 'react-native';
+import { COLORS, SHADOWS, FONT, SPACING, BORDER_RADIUS } from '../utils/theme';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -454,7 +456,7 @@ const HomeScreen = () => {
             <MaterialIcons 
               name={isSelected ? 'check-circle' : 'radio-button-unchecked'} 
               size={24} 
-              color={isSelected ? '#7950f2' : '#adb5bd'}
+              color={isSelected ? COLORS.primary : COLORS.border}
             />
           </View>
         )}
@@ -474,11 +476,89 @@ const HomeScreen = () => {
     );
   };
   
+  // Define header, XP progress section, and other UI elements that will be added to the FlatList
+  const HeaderComponent = () => (
+    <>
+      <View style={styles.header}>
+        <Text style={styles.greeting}>
+          <Text style={styles.greetingHighlight}>Hey {user?.name || mockUser.name}!</Text>
+        </Text>
+        <Text style={styles.subGreeting}>What would you like to do today?</Text>
+      </View>
+        
+      <View style={styles.xpContainer}>
+        <View style={styles.xpCard}>
+          <View style={styles.xpHeader}>
+            <Text style={styles.xpTitle}>XP Progress</Text>
+            <Text style={styles.xpCount}>{xp} of {xpGoal} XP</Text>
+          </View>
+          <View style={styles.progressBarBg}>
+            <View 
+              style={[
+                styles.progressBar, 
+                { width: `${Math.min(100, (xp / xpGoal) * 100)}%` }
+              ]} 
+            />
+          </View>
+          <View style={styles.achievementContainer}>
+            <View style={styles.achievementBadge}>
+              <Text style={styles.achievementText}>🏆</Text>
+            </View>
+            <Text style={styles.achievementLabel}>Item Posted</Text>
+          </View>
+        </View>
+      </View>
+        
+      <View style={styles.actionButtons}>
+        <TouchableOpacity 
+          style={styles.tradeButton}
+          onPress={navigateToSubmitItem}>
+          <Text style={styles.buttonText}>Publish an Item</Text>
+        </TouchableOpacity>
+      </View>
+        
+      <View style={styles.myItemsHeaderSection}>
+        <Text style={styles.sectionTitle}>My Items</Text>
+      </View>
+
+      {isSelectionMode && (
+        <View style={styles.selectionModeHeader}>
+          <Text style={styles.selectionCountText}>
+            {selectedItems.length} {selectedItems.length === 1 ? 'item' : 'items'} selected
+          </Text>
+          <View style={styles.selectionActions}>
+            {selectedItems.length > 0 && (
+              <TouchableOpacity 
+                style={styles.deleteSelectedButton} 
+                onPress={handleBatchDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <ActivityIndicator size="small" color={COLORS.white} />
+                ) : (
+                  <Text style={styles.deleteSelectedText}>Delete</Text>
+                )}
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.cancelSelectionButton} onPress={toggleSelectionMode}>
+              <Text style={styles.cancelSelectionText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    </>
+  );
+
+  // Empty footer component - we removed the duplicate Publish button
+  const FooterComponent = () => (
+    <View style={styles.footerSpace} />
+  );
+
   const renderMyItems = () => {
     if (isLoading) {
       return (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#7950f2" />
+          <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
       );
     }
@@ -506,146 +586,35 @@ const HomeScreen = () => {
     }
     
     return (
-      <View style={{ flex: 1 }}>
-        {/* Selection mode header */}
-        {isSelectionMode && (
-          <View style={styles.selectionModeHeader}>
-            <Text style={styles.selectionCountText}>
-              {selectedItems.length} {selectedItems.length === 1 ? 'item' : 'items'} selected
-            </Text>
-            <View style={styles.selectionActions}>
-              {selectedItems.length > 0 && (
-                <TouchableOpacity 
-                  style={styles.deleteSelectedButton} 
-                  onPress={handleBatchDelete}
-                  disabled={isDeleting}
-                >
-                  {isDeleting ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.deleteSelectedText}>Delete</Text>
-                  )}
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.cancelSelectionButton} onPress={toggleSelectionMode}>
-                <Text style={styles.cancelSelectionText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-        
-        <FlatList
-          data={items}
-          renderItem={({ item }) => (
+      <FlatList
+        data={items}
+        renderItem={({ item }) => (
+          <View style={styles.itemCardWrapper}>
             <ItemCard 
               item={item} 
               onPress={() => navigation.navigate('ItemDetail', { item })}
             />
-          )}
-          keyExtractor={(item, index) => item.id || index.toString()}
-          showsVerticalScrollIndicator={false}
-          initialNumToRender={4}
-          maxToRenderPerBatch={10}
-          windowSize={5}
-          removeClippedSubviews={true}
-          contentContainerStyle={styles.itemsContainer}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-            />
-          }
-        />
-        
-        {!isSelectionMode && items.length > 0 && (
-          <TouchableOpacity 
-            style={styles.selectModeButton}
-            onPress={toggleSelectionMode}
-          >
-            <MaterialIcons name="playlist-add-check" size={20} color="#fff" />
-            <Text style={styles.selectModeButtonText}>Select Items</Text>
-          </TouchableOpacity>
+          </View>
         )}
-      </View>
+        keyExtractor={(item, index) => item.id || index.toString()}
+        ListHeaderComponent={HeaderComponent}
+        ListFooterComponent={FooterComponent}
+        showsVerticalScrollIndicator={true}
+        contentContainerStyle={styles.mainContentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+          />
+        }
+      />
     );
   };
   
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
-      <View style={styles.scrollContent}>
-        <View style={styles.header}>
-          <Text style={styles.greeting}>
-            <Text style={styles.greetingHighlight}>Hey {user?.name || mockUser.name}!</Text>
-          </Text>
-          <Text style={styles.subGreeting}>What would you like to do today?</Text>
-          
-          {/* No diagnostic test images - showing real content */}
-        </View>
-        
-        {/* We've removed diagnostic tools now that S3 images are working */}
-        
-        <View style={styles.xpContainer}>
-          <View style={styles.xpCard}>
-            <View style={styles.xpHeader}>
-              <Text style={styles.xpTitle}>XP Progress</Text>
-              <Text style={styles.xpCount}>{xp} of {xpGoal} XP</Text>
-            </View>
-            <View style={styles.progressBarBg}>
-              <View 
-                style={[
-                  styles.progressBar, 
-                  { width: `${Math.min(100, (xp / xpGoal) * 100)}%` }
-                ]} 
-              />
-            </View>
-            <View style={styles.achievementContainer}>
-              <View style={styles.achievementBadge}>
-                <Text style={styles.achievementText}>🏆</Text>
-              </View>
-              <Text style={styles.achievementLabel}>Item Posted</Text>
-            </View>
-          </View>
-        </View>
-        
-        <View style={styles.actionButtons}>
-          <TouchableOpacity 
-            style={styles.tradeButton}
-            onPress={navigateToTradeSelect}>
-            <Text style={styles.buttonText}>Trade an Item</Text>
-          </TouchableOpacity>
-          
-          <View style={styles.disabledButtonContainer}>
-            <View style={styles.disabledButton}>
-              <Text style={styles.disabledButtonText}>Buy Something</Text>
-              <Text style={styles.comingSoonText}>Coming Soon</Text>
-            </View>
-          </View>
-          
-          <View style={styles.disabledButtonContainer}>
-            <View style={styles.disabledButton}>
-              <Text style={styles.disabledButtonText}>Sell an Item</Text>
-              <Text style={styles.comingSoonText}>Coming Soon</Text>
-            </View>
-          </View>
-        </View>
-        
-        <View style={styles.myItemsSection}>
-          <Text style={styles.sectionTitle}>My Items</Text>
-          {renderMyItems()}
-        </View>
-        
-        {/* Prominent Publish Button */}
-        <View style={styles.publishButtonContainer}>
-          <TouchableOpacity 
-            style={styles.publishButton}
-            onPress={() => navigation.navigate('SubmitItem')}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.publishButtonText}>Publish an item</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+      {renderMyItems()}
     </SafeAreaView>
   );
 };
@@ -653,134 +622,178 @@ const HomeScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: COLORS.background,
   },
   scrollContent: {
     flex: 1,
-    paddingHorizontal: 15,
+  },
+  scrollContentContainer: {
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: 120, // Add bottom padding to allow scrolling past the last item
+  },
+  mainContentContainer: {
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: 120, // Add bottom padding for proper spacing
+  },
+  itemCardWrapper: {
+    backgroundColor: COLORS.cardBackground,
+    marginHorizontal: SPACING.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+  },
+  footerSpace: {
+    height: 40,
   },
   header: {
-    marginTop: 15,
-    marginBottom: 20,
+    marginTop: SPACING.lg,
+    marginBottom: SPACING.xl,
+    backgroundColor: COLORS.cardBackground,
+    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.lg,
+    ...SHADOWS.small,
   },
   greeting: {
-    fontSize: 22,
-    color: '#333',
+    fontSize: FONT.sizes.xxl,
+    color: COLORS.text,
+    fontWeight: FONT.weights.bold,
   },
   greetingHighlight: {
-    fontWeight: 'bold',
-    color: '#7950f2',
+    fontWeight: FONT.weights.bold,
+    color: COLORS.primaryDark,
   },
   subGreeting: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 5,
+    fontSize: FONT.sizes.md,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
   },
   xpContainer: {
-    marginBottom: 20,
+    marginBottom: SPACING.xl,
   },
   xpCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    ...SHADOWS.small,
   },
   xpHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: SPACING.md,
   },
   xpTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: FONT.sizes.lg,
+    fontWeight: FONT.weights.bold,
+    color: COLORS.text,
   },
   xpCount: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: FONT.sizes.sm,
+    color: COLORS.textSecondary,
+    fontWeight: FONT.weights.medium,
   },
   progressBarBg: {
-    height: 8,
-    backgroundColor: '#e9ecef',
-    borderRadius: 4,
-    marginBottom: 15,
+    height: 10,
+    backgroundColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.round,
+    marginBottom: SPACING.md,
   },
   progressBar: {
-    height: 8,
-    backgroundColor: '#7950f2',
-    borderRadius: 4,
+    height: 10,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.round,
   },
   achievementContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.sm,
+    alignSelf: 'flex-start',
   },
   achievementBadge: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#f9f7fd',
+    width: 28,
+    height: 28,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.secondary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: SPACING.sm,
   },
   achievementText: {
-    fontSize: 16,
+    fontSize: FONT.sizes.sm,
   },
   achievementLabel: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: FONT.sizes.sm,
+    color: COLORS.text,
+    fontWeight: FONT.weights.medium,
   },
   actionButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: SPACING.xl,
   },
   tradeButton: {
     flex: 1,
-    backgroundColor: '#7950f2',
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: COLORS.secondary,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
     alignItems: 'center',
-    marginRight: 8,
+    marginRight: SPACING.sm,
+    ...SHADOWS.small,
   },
   buttonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
+    color: COLORS.text,
+    fontWeight: FONT.weights.semiBold,
+    fontSize: FONT.sizes.md,
   },
   disabledButtonContainer: {
     flex: 1,
-    marginHorizontal: 4,
+    marginHorizontal: SPACING.xs,
   },
   disabledButton: {
-    backgroundColor: '#e9ecef',
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: COLORS.disabled,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
     alignItems: 'center',
   },
   disabledButtonText: {
-    color: '#adb5bd',
-    fontWeight: '600',
-    fontSize: 14,
+    color: COLORS.textLight,
+    fontWeight: FONT.weights.medium,
+    fontSize: FONT.sizes.md,
   },
   comingSoonText: {
-    color: '#adb5bd',
-    fontSize: 10,
-    marginTop: 2,
+    color: COLORS.textLight,
+    fontSize: FONT.sizes.xs,
+    marginTop: SPACING.xs,
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.xs,
   },
   myItemsSection: {
-    flex: 1,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+    ...SHADOWS.small,
+    minHeight: 300, // Add more height for the items section
+  },
+  myItemsHeaderSection: {
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: BORDER_RADIUS.lg,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    padding: SPACING.md,
+    paddingBottom: 0,
+    ...SHADOWS.small,
+    shadowOpacity: 0.1, // Lighter shadow for the header
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 15,
+    fontSize: FONT.sizes.xl,
+    fontWeight: FONT.weights.bold,
+    color: COLORS.text,
+    marginBottom: SPACING.md,
+    marginLeft: SPACING.xs,
   },
   loadingContainer: {
     padding: 20,
@@ -831,25 +844,23 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   itemsContainer: {
-    paddingBottom: 20,
+    paddingBottom: SPACING.lg,
   },
   itemCard: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.md,
+    marginBottom: SPACING.md,
+    ...SHADOWS.small,
     flexDirection: 'row',
     overflow: 'hidden',
     position: 'relative',
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.primary,
   },
   selectedItemCard: {
-    backgroundColor: '#f0ebff',
+    backgroundColor: COLORS.primaryLight,
     borderWidth: 2,
-    borderColor: '#7950f2',
+    borderColor: COLORS.primary,
   },
   checkboxContainer: {
     position: 'absolute',
@@ -892,34 +903,30 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
   publishButton: {
-    backgroundColor: '#7950f2',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 30,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xl,
+    borderRadius: BORDER_RADIUS.round,
+    ...SHADOWS.medium,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
   publishButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
+    color: COLORS.white,
+    fontSize: FONT.sizes.lg,
+    fontWeight: FONT.weights.bold,
+    marginLeft: SPACING.sm,
   },
   selectionModeHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#7950f2',
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-    borderRadius: 8,
-    marginBottom: 15,
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    marginBottom: SPACING.md,
   },
   selectionCountText: {
     color: '#fff',
@@ -954,24 +961,20 @@ const styles = StyleSheet.create({
   },
   selectModeButton: {
     position: 'absolute',
-    right: 15,
-    bottom: 90,
-    backgroundColor: '#7950f2',
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: 25,
+    right: SPACING.md,
+    bottom: SPACING.md,
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.round,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 5,
+    ...SHADOWS.small,
   },
   selectModeButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    marginLeft: 5,
+    color: COLORS.white,
+    marginLeft: SPACING.xs,
+    fontWeight: FONT.weights.semiBold,
   },
 });
 

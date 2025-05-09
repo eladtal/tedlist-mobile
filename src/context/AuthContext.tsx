@@ -51,18 +51,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(null);
       setIsAuthenticated(false);
       
-      // Then try to call logout API to invalidate token on server
-      // Wrapped in try/catch so even if this fails, the local logout succeeds
-      try {
-        await authService.logout();
-      } catch (logoutError) {
-        console.log('Non-critical: Error calling logout API:', logoutError);
-        // This is non-critical - we still want to clear local storage even if API fails
-      }
-      
-      // Clear storage
+      // Clear storage first - this is the most important part
       await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
       await AsyncStorage.removeItem(REFRESH_TOKEN_KEY);
+      
+      // Then try to call logout API to invalidate token on server (if it exists)
+      // The server call is optional - local cleanup is what matters
+      try {
+        // We'll skip the server call since we know the endpoint doesn't exist
+        // This prevents unnecessary 404 errors in the console
+        // await authService.logout();
+        console.log('Skipping server logout call - endpoint not implemented');
+      } catch (logoutError) {
+        // Non-critical error - we've already cleared local state
+        console.log('Non-critical: Error calling logout API:', logoutError);
+      }
     } catch (error) {
       console.error('Error during logout:', error);
       // Even if there's an error, we should try to clean up the state
@@ -75,6 +78,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const checkAuthStatus = async () => {
       try {
+        // Clear any existing tokens to force login screen
+        await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+        await AsyncStorage.removeItem(REFRESH_TOKEN_KEY);
+        console.log('Cleared authentication tokens to force login screen');
+        setIsAuthenticated(false);
+        setIsLoading(false);
+        return;
+        
+        // The code below will not execute due to the return above
         const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
         
         if (token) {
@@ -129,8 +141,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   setIsAuthenticated(true);
                 } else {
                   console.log('No user data returned, assuming not logged in');
-                  // Don't force logout - just continue unauthenticated
+                  // Properly enforce logout - don't continue unauthenticated
                   setIsAuthenticated(false);
+                  await handleLogout(); // Force logout to show login screen
                 }
               } catch (profileError) {
                 // Don't display errors during startup as red console errors
